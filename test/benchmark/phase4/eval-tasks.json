@@ -1,0 +1,1012 @@
+{
+  "schema": 1,
+  "approvedBy": "Aaron Phan",
+  "approvedAt": "2026-11-16T18:47:56Z",
+  "decision": "D-07",
+  "arms": {
+    "A": {
+      "name": "Baseline: GSD map plus self-found files",
+      "description": "The agent reads the repository GSD codebase map (generated at the task parent when the repository carries none there) and finds any other files itself with ordinary search and reads. No AVARICE pack. This is the D-06 baseline, taken from docs/operations-and-testing.md, not the full repository."
+    },
+    "B": {
+      "name": "Pack with the code-only graph",
+      "description": "The AVARICE context pack built at the task parent with the gsd-intel and gsd-graph adapters, the knowledge pass off: code nodes only."
+    },
+    "C": {
+      "name": "Pack with the knowledge graph",
+      "description": "The same pack with the knowledge pass on: code nodes plus document nodes."
+    }
+  },
+  "specMapping": "The spec names three arms: document section reads, the code-only graph, and the graph with document nodes (docs/operations-and-testing.md, Context retrieval evaluation). Here arm A is the D-06 baseline, B is the code-only graph and C is the graph with document nodes. The difference from the spec is recorded as a findings line by plan 04-39.",
+  "successRule": "A task succeeds when every required check passes at the end of the run and the held-out test, copied from the target commit after the agent finishes, passes. Reviewer judgment is a sampled owner spot-check, not a gate.",
+  "passRule": {
+    "text": "AC-8 passes when the task success rate of arm B or arm C is at least the success rate of arm A and its total tokens are no more than 50% of arm A total tokens, over the 20 tasks.",
+    "maxTokenShare": 0.5
+  },
+  "knowledgeRule": {
+    "text": "D-08: the knowledge pass stays on unless arm C shows no task-success gain over arm B and also costs more tokens than arm B. The outcome is recorded as an ADR in docs/decisions/ either way."
+  },
+  "tokenMetric": {
+    "text": "Tokens are the sum, over distinct assistant messages, of input, cache-creation, cache-read and output tokens (A2). USD cost is recorded beside them."
+  },
+  "isolation": {
+    "text": "Each arm runs in a checkout at the task parent with no history after it and no remote. The held-out test files are never placed where an arm can read them: deniedReads takes precedence over allowedReads, and the held-out tests are copied in only after the agent has stopped. The index and the pack are built at the parent, never at the target commit."
+  },
+  "tasks": [
+    {
+      "id": "T01",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "890ba197d5118fa793419ae8917b917806976429",
+      "parent": "5e0810b5aaaeb2efff798f1f05d0162553789160",
+      "subject": "fix(03-23): load the motion feature bundle when reduced motion turns off mid-visit",
+      "brief": "fix(03-23): load the motion feature bundle when reduced motion turns off mid-visit\n\n- Hold the LazyMotion loader pending while reduced and release it when the preference flips\n- Add unit and e2e coverage for the reduced-then-off case",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/motion-features.test.tsx",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/motion-features.test.tsx"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/motion.spec.ts",
+        "tests/unit/motion-features.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 24
+    },
+    {
+      "id": "T02",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "5bfcb9d869c4ed252c0b3182e6f23df99da76d8b",
+      "parent": "520c2beacdfb4ed309c9a326f1bd26731260a50f",
+      "subject": "fix(03-21): close the project dialog only on a real backdrop click and leave modified arrows alone",
+      "brief": "fix(03-21): close the project dialog only on a real backdrop click and leave modified arrows alone\n\n- Backdrop closes only when pointerdown and pointerup both land on the dialog element (WR-02)\n- ArrowLeft and ArrowRight ignore Alt, Ctrl, Meta, Shift and key repeat (WR-03)\n- e2e drag, modifier and repeat cases plus unit coverage",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/sections.test.tsx",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/sections.test.tsx"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/project-dialog.spec.ts",
+        "tests/unit/sections.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 34
+    },
+    {
+      "id": "T03",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "aaa8d42398d87567b4ab82a75be504c39bd5028f",
+      "parent": "5bfcb9d869c4ed252c0b3182e6f23df99da76d8b",
+      "subject": "fix(03-21): name the copy button and the sleeves by their visible text",
+      "brief": "fix(03-21): name the copy button and the sleeves by their visible text\n\n- Copy button accessible name is 'Copy email <address>' (WCAG 2.5.3, WR-04)\n- Sleeve name is its visible title via aria-labelledby; dates, context, stack, +N more and\n  position move to an sr-only description\n- Sleeve is relative so the sr-only span stays clipped inside the crate",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/sections.test.tsx",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/sections.test.tsx"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/contact.spec.ts",
+        "tests/e2e/project-dialog.spec.ts",
+        "tests/unit/sections.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 2,
+      "sourceLines": 35
+    },
+    {
+      "id": "T04",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "0be73fb3f9f6c6d6e9c7902d850c643aae886b83",
+      "parent": "b2e1d27eb3d820a710e234c8ec87d476fd9d6a8d",
+      "subject": "fix(03-24): format the Education lead from the ISO end date",
+      "brief": "fix(03-24): format the Education lead from the ISO end date\n\n- add monthYear in src/lib/dates.ts, strict YYYY-MM, UTC formatting\n- drop the en-dash label split so any label separator renders December 2026\n- unit cases for the formatter and a hyphen-label Education render",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/dates.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/dates.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/unit/dates.test.ts",
+        "tests/unit/sections.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 2,
+      "sourceLines": 29
+    },
+    {
+      "id": "T05",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "9f1c20831a30abed02549efa50f1f97201a8e5d0",
+      "parent": "0be73fb3f9f6c6d6e9c7902d850c643aae886b83",
+      "subject": "fix(03-24): give the employer-logo sources sizes=20px",
+      "brief": "fix(03-24): give the employer-logo sources sizes=20px\n\n- the browser now takes the 40 w candidate at 1x and 2x and 60 w at 3x\n- unit check on every picture source; e2e density cases at pixel ratio 1 and 3\n- logo comment in images.ts states the sizes-based choice",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/sections.test.tsx",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/sections.test.tsx"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/content.spec.ts",
+        "tests/unit/sections.test.tsx"
+      ],
+      "size": "small",
+      "sourceFileCount": 2,
+      "sourceLines": 22
+    },
+    {
+      "id": "T06",
+      "repository": "aa-phan-portfolio-v2",
+      "commit": "b34a99daa0bf9c62baecadaa2150ab39077034e3",
+      "parent": "9f1ce4b5ba6add79f91c01bf7cc3efa827946161",
+      "subject": "fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked",
+      "brief": "fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked",
+      "checks": [
+        {
+          "name": "typecheck",
+          "argv": [
+            "npm",
+            "run",
+            "typecheck"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "format:check",
+          "argv": [
+            "npm",
+            "run",
+            "format:check"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/unit/theme.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/unit/theme.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/e2e/theme.spec.ts",
+        "tests/unit/theme.test.ts"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 16
+    },
+    {
+      "id": "T07",
+      "repository": "auto_search_workflow",
+      "commit": "e83d563cbd316ef189dce48feaeed3869247f85f",
+      "parent": "e2cdf802ed76dd0af83de15f9338e178def715e5",
+      "subject": "fix(03): WR-06 keep Identity entry count as a high-water mark so identity_shrunk is not reported once",
+      "brief": "fix(03): WR-06 keep Identity entry count as a high-water mark so identity_shrunk is not reported once\n\nrecord_compact_check now stores max(previous, current), so a lower count never becomes the new reference. An unrepaired Identity loss is counted on every compact check, keeps the run degraded and holds the fold back (WR-05 gate) until the missing IDs are restored. No acknowledgement flag is added (owner decision). SPEC, D-57 and STATUS updated; tests are offline and mocked.",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_storage_parity.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_storage_parity.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_storage_parity.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 7
+    },
+    {
+      "id": "T08",
+      "repository": "auto_search_workflow",
+      "commit": "8b02697e1ec058e06f145ec66a7fcec8adf84153",
+      "parent": "66489493efc0be3b6fea4b044a19d45deda2835a",
+      "subject": "fix(03): WR-05 skip the fold when the integrity check of the same run counted a difference",
+      "brief": "fix(03): WR-05 skip the fold when the integrity check of the same run counted a difference\n\nThe fold deletes Events rows for good and trusts Identity and Tally. storage_check now returns its counted differences and the fold runs only\nwhen the check of the same run counted none (a raised or missing check also skips it), leaving fold.last_day unset so the next clean run folds.\nThe fold-durability pipeline tests are rewritten for the new behaviour; the per-key rule stays pinned by the fold-plan unit tests. SPEC and\nDECISIONS D-57 updated.",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_storage_cutover.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_storage_cutover.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_storage_cutover.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 17
+    },
+    {
+      "id": "T09",
+      "repository": "auto_search_workflow",
+      "commit": "66489493efc0be3b6fea4b044a19d45deda2835a",
+      "parent": "024319fa53ee0ad722135205aa87043ec9257ebd",
+      "subject": "fix(03): WR-04 drop the Identity cache after a failed write so a lost reply cannot cause an overwrite",
+      "brief": "fix(03): WR-04 drop the Identity cache after a failed write so a lost reply cannot cause an overwrite\n\nwrite_identity planned later writes from a cache that follows only requests whose reply arrived. A request Google applied whose reply was lost left\nthe cache behind the sheet, and the next write rewrote the cell without the entries already written (or appended a second row for the same chunk).\nAny exception now drops the cache and the next call reads the Identity tab alone before planning.",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_compact.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_compact.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_compact.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 25
+    },
+    {
+      "id": "T10",
+      "repository": "auto_search_workflow",
+      "commit": "024319fa53ee0ad722135205aa87043ec9257ebd",
+      "parent": "58d9ec21bef420c12f9e4573e784a464b69728a6",
+      "subject": "fix(03): WR-03 carry a failed Tally row in the storage key so a transient write error is not a permanent undercount",
+      "brief": "fix(03): WR-03 carry a failed Tally row in the storage key so a transient write error is not a permanent undercount\n\nIn compact mode a run's baseline counts live only in its Tally row, so the start-of-run repair cannot rebuild them. A failed append now keeps the\nrow (counts only, at most 20) as pending_tally in the storage key; the next run writes it before any repair, drops it if the group is already\nin Tally, and keeps the repair from writing a shorter row for a waiting group. SPEC and DECISIONS D-57 updated.",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_storage_cutover.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_storage_cutover.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_storage_cutover.py"
+      ],
+      "size": "medium",
+      "sourceFileCount": 2,
+      "sourceLines": 75
+    },
+    {
+      "id": "T11",
+      "repository": "auto_search_workflow",
+      "commit": "3fc4e2140f6d61aa249911f487462cc2aedc1f9b",
+      "parent": "0878ce6bcae672d747faa011627edbad4a929b8b",
+      "subject": "fix(02): WR-04 keep Groq model output out of the public log",
+      "brief": "fix(02): WR-04 keep Groq model output out of the public log",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_hunter.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_hunter.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_hunter.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 4
+    },
+    {
+      "id": "T12",
+      "repository": "auto_search_workflow",
+      "commit": "0878ce6bcae672d747faa011627edbad4a929b8b",
+      "parent": "5c6ae3fb5becdfbd353bdc43055d839c5d113ce2",
+      "subject": "fix(02): WR-03 name an unreadable Groq budget in the run note and survive inf",
+      "brief": "fix(02): WR-03 name an unreadable Groq budget in the run note and survive inf",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_hunter.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_hunter.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_hunter.py"
+      ],
+      "size": "medium",
+      "sourceFileCount": 1,
+      "sourceLines": 47
+    },
+    {
+      "id": "T13",
+      "repository": "auto_search_workflow",
+      "commit": "1fb26a680561fffcbcded83e7ace5b905fc5cec7",
+      "parent": "b30a691f2c5980a9bc55f1ece5d72a6ccdc4a8b2",
+      "subject": "fix(02-02): record alerted only when a channel accepted the message",
+      "brief": "fix(02-02): record alerted only when a channel accepted the message\n\n- stage 4 writes no event and uses no attempt when send_alert returns False\n- the run counts the alert as failed and is degraded with a no-channel note\n- AlertRecordingTests tracer test; fresh_setup moved up into HarnessCase\n- module docstring rule 3 now states acceptance as the condition",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_core.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_core.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_core.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 15
+    },
+    {
+      "id": "T14",
+      "repository": "auto_search_workflow",
+      "commit": "0447ad04f8d2c8a3d51f39e5e90248af29a43105",
+      "parent": "b1b20ce9dd9d56be0271cd248466dfe963ce51d9",
+      "subject": "fix: write and read the Job Tracker by header name so reordered columns stay aligned (D-44)",
+      "brief": "fix: write and read the Job Tracker by header name so reordered columns stay aligned (D-44)",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_hunter.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_hunter.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_hunter.py"
+      ],
+      "size": "medium",
+      "sourceFileCount": 1,
+      "sourceLines": 57
+    },
+    {
+      "id": "T15",
+      "repository": "auto_search_workflow",
+      "commit": "dfbdd57468bf173fd5a1ab1d6921f445d6c3817a",
+      "parent": "def7379ac3e5f79d6d77c043a59b3088f8361547",
+      "subject": "fix: treat any future-dated source timestamp as uncertain, not recent",
+      "brief": "fix: treat any future-dated source timestamp as uncertain, not recent\n\nLive data showed aggregator boards (jobgether) stamping postings 20-50 minutes ahead of\nreal time; those fell through to \"recent\" with a nonsensical reason.",
+      "checks": [
+        {
+          "name": "test",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "heldOutTest": "tests/test_core.py",
+      "heldOutCommand": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_core.py"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "tests/test_core.py"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 5
+    },
+    {
+      "id": "T16",
+      "repository": "GroceriesGPT",
+      "commit": "dcc9581ed8886c81d77f44ca9f8059ea7ed9f8c5",
+      "parent": "5c095cc6a4cefecbfecc390335193d50c9a9996e",
+      "subject": "Gate ASR on caption-sufficiency, same as OCR (fixes ASR OOM on the common path)",
+      "brief": "Gate ASR on caption-sufficiency, same as OCR (fixes ASR OOM on the common path)\n\nProduct-scope decision (2026-07-20): this app's actual scope is ingredients\n-> cart, not step-by-step cooking instructions. Narration's two roles were\n(a) capturing `steps` - confirmed unused, never rendered anywhere in web/\n- and (b) a secondary tie-breaking evidence source for ingredient values\nwhen OCR/caption conflict (reconcile.ts rules 3/9). Neither justifies\nrunning Whisper unconditionally on every job when the caption already\ncovers ingredients, especially given the real cost: ASR inference peaks\n~1.3-2GB RSS for realistic audio (see recipecart-worker-asr-oom memory),\nexceeding the Railway worker's 1024MB limit and OOM-crashing every real\njob, including caption-sufficient ones.\n\nFix: transcribeAudio() is now gated by the same `extractFrames` flag OCR\nalready uses (both derive from captionSufficient). Caption-sufficient\njobs - the common case, and per this session's explicit working\nassumption - now skip ASR entirely and never touch the OOM-prone code\npath. Caption-insufficient jobs still run both OCR and ASR, so the known\nmemory issue remains open for that path specifically - deferred, not\nfixed, matching this session's decision to treat caption-sufficient\nextraction as the thing that needs to be solid for now.",
+      "checks": [
+        {
+          "name": "build",
+          "argv": [
+            "npm",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "src/pipeline/extract/index.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "src/pipeline/extract/index.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "src/pipeline/extract/index.test.ts"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 14
+    },
+    {
+      "id": "T17",
+      "repository": "GroceriesGPT",
+      "commit": "92348c207a7b4b1fafc81779e593a00733388131",
+      "parent": "0549dcf1a0f4a0c01086fc5184c1881f12ccf5f8",
+      "subject": "Fix real duplicate-detection gap: resolve short-link tokens before dedup",
+      "brief": "Fix real duplicate-detection gap: resolve short-link tokens before dedup\n\nReal gap found via live iOS Shortcut testing 2026-07-20: TikTok's native\nShare button mints a fresh tiktok.com/t/<token>/ short-link every time,\neven for the identical underlying video. Job-creation dedup was keyed on\nthe raw URL string (or a video id parsed directly from the URL shape),\nbut normalizeUrl() can't extract an id from short-link forms at all -\nthat only happens later, inside yt-dlp, well after job creation. So two\nshares of the exact same video almost never actually deduped in practice,\nonly when a user happened to paste the literal identical URL string\ntwice - not the common real-world case.\n\nFix: deriveIdempotencyKey (src/platform/jobs.ts) now resolves short-link\nredirect chains via a lightweight HEAD request (resolveShortLinkVideoId,\nnormalize_url.ts) before computing the dedup key, extracting the real\nvideo id. Only fires for short-link forms - full-form /video/<id> submits\nare unaffected, so this adds no latency to the common case. Falls back to\nraw-URL dedup on any resolution failure (network hiccup, timeout - capped\nat config.jobs.shortLinkResolveTimeoutMs, 2.5s) rather than failing the\nsubmission.\n\nVerified against real TikTok servers, not just mocks: resolved a real\nshort-link to its actual video id in ~586ms, and confirmed end-to-end via\nthe real compiled API that a short-link submit and a full-form submit of\nthe same video now correctly collapse into one job (created: false on\nthe second).\n\nAlso resolves docs/ios-shortcut.md's stale \"/setup path is a guess\" open\nquestion - confirmed live and working this session.",
+      "checks": [
+        {
+          "name": "build",
+          "argv": [
+            "npm",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "src/pipeline/extract/normalize_url.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "src/pipeline/extract/normalize_url.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "src/pipeline/extract/normalize_url.test.ts",
+        "src/platform/jobs.test.ts"
+      ],
+      "size": "medium",
+      "sourceFileCount": 3,
+      "sourceLines": 69
+    },
+    {
+      "id": "T18",
+      "repository": "GroceriesGPT",
+      "commit": "253c03b7516cc48369555dee50f2087f03040b4a",
+      "parent": "e03e1ebd60dcda36f7fd2d61e74c346d61d45c02",
+      "subject": "Phase 2: escalation-scoring refinement (Spec 2 §2.4)",
+      "brief": "Phase 2: escalation-scoring refinement (Spec 2 §2.4)\n\nThe P1 baseline scored escalation frames by ingredient-likelihood alone.\nAdds the two other terms the spec calls for:\n- Inverse-OCR-confidence weighting: a frame Tesseract read with LOW\n  confidence but that still looks like an ingredient line is exactly the\n  case vision escalation exists for. A floor (0.2) keeps a fully-confident\n  read from being zeroed out — still useful evidence, just less urgent to\n  also send as an image.\n- Early-frame bonus: a flat, linearly-decaying bonus for frames near the\n  start of the video (ordinal extracted from the frame_ref's embedded\n  index — media_split's frame-NNN.jpg / resize_frames's resized-NNN.jpg\n  both encode video-time order).\n- Hard rule: the single earliest-ordinal frame is always included even if\n  its own score doesn't make the ranked cut — a title/ingredient card\n  doesn't always contain quantity/unit-shaped text the likelihood scorer\n  recognizes. This is a real, documented behavior change from P1: a lone\n  frame with zero ingredient-likelihood text is now force-included as the\n  only (hence earliest) candidate rather than dropped — escalate_select.test.ts\n  updated with the new expectation and a comment explaining why.",
+      "checks": [
+        {
+          "name": "build",
+          "argv": [
+            "npm",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "src/pipeline/extract/escalate_select.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "src/pipeline/extract/escalate_select.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "src/pipeline/extract/escalate_select.test.ts"
+      ],
+      "size": "medium",
+      "sourceFileCount": 1,
+      "sourceLines": 119
+    },
+    {
+      "id": "T19",
+      "repository": "GroceriesGPT",
+      "commit": "24c2b6c118a788412b96074393b04b28b57e3467",
+      "parent": "253c03b7516cc48369555dee50f2087f03040b4a",
+      "subject": "Phase 2: search staleness re-check before cart approval (Spec 3 §2.2, A3-6)",
+      "brief": "Phase 2: search staleness re-check before cart approval (Spec 3 §2.2, A3-6)\n\n\"Re-run search if the recipe has sat in awaiting_review past a config\nwindow... before a cart run uses its prices.\" config.kroger.searchStalenessWindowMs\n(24h default) already existed but nothing enforced it.\n\n- matcher/index.ts: isMatchStale(recipeId) checks the OLDEST persisted\n  product_matches.updated_at across a recipe's ingredients (a partial\n  per-ingredient refresh isn't meaningful — matchRecipeAndPersist always\n  re-matches every ingredient in one pass). refreshIfStale() re-runs\n  matching only when stale, a no-op otherwise (no extra Kroger calls in the\n  common case of approving promptly after extraction).\n- cli.ts's `approve` command calls refreshIfStale before selecting approved\n  items — also fixes a latent gap where `approve` never loaded the store\n  location at all, so it had no locationId available for a re-search even\n  if one were needed.\n\nLive-verified a real parsing gotcha before shipping: sqlite's\ndatetime('now') returns a UTC string with no 'Z'/'T' markers\n(\"2026-07-19 01:41:19\"), and `new Date(thatString)` parses it as LOCAL\ntime, not UTC — a real ~5h skew in this environment's timezone that would\nhave silently misjudged staleness. parseSqliteUtcDatetime() converts to a\nproper ISO string first. staleness.test.ts uses a real in-memory sqlite DB\n(not the generic mocked-statement stub the rest of index.test.ts uses)\nspecifically so this date math is exercised for real, not assumed correct.",
+      "checks": [
+        {
+          "name": "build",
+          "argv": [
+            "npm",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "src/matcher/staleness.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "src/matcher/staleness.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "src/matcher/staleness.test.ts"
+      ],
+      "size": "medium",
+      "sourceFileCount": 2,
+      "sourceLines": 76
+    },
+    {
+      "id": "T20",
+      "repository": "GroceriesGPT",
+      "commit": "b3f8f89546000b1e23eff4587f27bce958e62238",
+      "parent": "c4567603a7a3f98349c694a4155c148f00bfd638",
+      "subject": "Fix cart:approve never updating the parent job's status",
+      "brief": "Fix cart:approve never updating the parent job's status\n\nReal bug, caught live via a real approved cart run: runCartApproval only\never wrote to cart_runs (its own table) - nothing updated the parent jobs\nrow. The web app's CartProgress screen polls GET /recipes/:id (i.e.\njobs.status) waiting for a terminal completed/partially_completed value\nto know when to navigate to the itemized CartResult screen. Since jobs\nnever left awaiting_review, the real cart run finished successfully in\nthe backend (verified: a real cart_runs row with status=completed and a\nreal completed_at) while the frontend just spun on the progress screen\nforever with no way to tell the user it was actually done.\n\nFix: cart.ts's route now calls the same finishJob() helper the worker's\nown state machine already uses for terminal transitions.\nCartRunStatus's four values (completed/partially_completed/failed/\nrequires_user_intervention) are identical strings to the matching\nJobStatusValue states, and recipeId === jobId always by construction.",
+      "checks": [
+        {
+          "name": "build",
+          "argv": [
+            "npm",
+            "run",
+            "build"
+          ]
+        },
+        {
+          "name": "lint",
+          "argv": [
+            "npm",
+            "run",
+            "lint"
+          ]
+        },
+        {
+          "name": "test",
+          "argv": [
+            "npm",
+            "run",
+            "test"
+          ]
+        }
+      ],
+      "heldOutTest": "src/api/routes/cart.test.ts",
+      "heldOutCommand": [
+        "npx",
+        "vitest",
+        "run",
+        "src/api/routes/cart.test.ts"
+      ],
+      "allowedReads": [
+        "**"
+      ],
+      "deniedReads": [
+        "src/api/routes/cart.test.ts"
+      ],
+      "size": "small",
+      "sourceFileCount": 1,
+      "sourceLines": 12
+    }
+  ]
+}

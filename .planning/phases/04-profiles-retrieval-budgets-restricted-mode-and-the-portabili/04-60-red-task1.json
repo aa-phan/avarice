@@ -1,0 +1,5 @@
+{
+  "command": "node --test test/unit/hook-decision.test.ts test/integration/hook-retrieval.test.ts",
+  "exitCode": 1,
+  "output": "✖ tracer: a brace-group refusal says the brace group is the cause (GIN-03, CON-10, T-04-158) (299.4715ms)\n✖ the broad-discovery refusal reason names a brace group when one is the cause (GIN-03, CON-10) (0.460917ms)\n✖ normalizeToolCall and parseHookPolicy (0.860333ms)\nℹ pass 212\nℹ fail 4\n✖ failing tests:\n✖ denies a root Grep with glob `*.{ts,tsx}` as broad discovery and names the brace group and the alternatives (99.566583ms)\n✖ gives a root Glob with pattern `**/*.{ts,tsx}` the brace reason (100.734ms)\n✖ refuses a brace-group glob with a reason that differs from the no-filter reason (0.415708ms)\n✖ maps Claude tool names to normalized calls and resolves relative paths against cwd (0.420667ms)"
+}

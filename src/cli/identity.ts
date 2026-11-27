@@ -28,6 +28,15 @@ export function refuseOutsideTerminal(env: NodeJS.ProcessEnv, context: IdentityC
   return undefined;
 }
 
+// The run-only part of that refusal, for the commands that record what the owner pastes in (`context add`, `evidence add`, `pr record`; plan 04-27, T-04-74): a run's
+// own process must not record evidence or context for itself, but a script that is not a run may, so no terminal is required. Without the context that tells where the
+// command runs, only the run marker is judged.
+export function refuseInsideRun(env: NodeJS.ProcessEnv, context?: IdentityContext): string | undefined {
+  if (env['AVARICE_RUN'] !== undefined) return 'refused inside a run (AVARICE_RUN is set)';
+  if (context !== undefined && inRunProcessTree(context.ancestry())) return "refused from inside a run's process tree";
+  return undefined;
+}
+
 // The OS user the process runs as, with control characters removed so the name is safe to store and to print. `unknown` when the OS has no
 // answer (a user ID with no passwd entry) or the name is empty after cleaning.
 export function responderName(): string {

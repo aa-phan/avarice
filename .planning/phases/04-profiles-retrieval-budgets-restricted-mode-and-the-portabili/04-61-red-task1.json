@@ -1,0 +1,5 @@
+{
+  "command": "node --test --test-name-pattern \"re-judging recorded runs with brief coverage\" test/unit/eval-retrieval.test.ts",
+  "exitCode": 1,
+  "output": "✖ re-judging recorded runs with brief coverage (plan 04-61, G-04-3) (39.369042ms)\nℹ tests 4\nℹ pass 0\nℹ fail 4\n✖ failing tests:\n✖ reads the bullets of the six recorded portfolio briefs: two, three, three, three, three and one, with the wrapped bullet of T03 joined (37.236292ms)\n  TypeError [Error]: briefBullets is not a function\n✖ opens an item for a line that is not a bullet, and keeps CRLF and blank lines from changing the list (0.074666ms)\n  TypeError [Error]: briefBullets is not a function\n✖ counts a success with every bullet delivered as success, one with a partly or skipped bullet as partial and a failure as failure, and takes the verdict from the successes (0.124667ms)\n  TypeError [Error]: judgeWithCoverage is not a function\n✖ re-judges the files without writing: the digests of the four sources, the amendment rule, the arms, the runs, the verdict and the knowledge outcome (1.200959ms)\n  TypeError [Error]: briefBullets is not a function"
+}

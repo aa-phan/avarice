@@ -7,10 +7,10 @@ import { ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { IndexStepResult } from '../../domain/project-record.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
-import { INDEX_STEPS, indexStepKey } from './index-steps.ts';
+import { INDEX_STEPS, indexStepKey, profileDisabledStep } from './index-steps.ts';
 import type { IndexStep } from './index-steps.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { loadContract, stagingPathOf } from './shared.ts';
+import { loadContract, loadMappingPlan, stagingPathOf } from './shared.ts';
 import type { StoredContract } from './shared.ts';
 
 const MAX_DETAIL = 200;
@@ -41,6 +41,15 @@ async function runStep(step: IndexStep, ctx: StageContext, row: OnboardingRow, s
   }
 }
 
+// A restricted onboarding (plan 04-24; CON-4, D-12) builds the code graph only: it runs in AVARICE's own sandboxed executor and starts no host. The intel and knowledge steps
+// each launch a contained invocation, which a restricted onboarding never has, so the record says they are absent for that reason (ONB-13: an absent index never blocks).
+// An index the contract turned off stays disabled and says nothing.
+function restrictedStep(step: IndexStep, contract: StoredContract): IndexStepResult {
+  const enabled = step.name === 'intel' ? contract.body.indexes.intel : contract.body.indexes.knowledge;
+  if (!enabled) return { index: step.name, status: 'disabled' };
+  return { index: step.name, status: 'absent', reason: 'restricted', detail: 'restricted onboarding: this index needs a contained host invocation' };
+}
+
 export const indexStage: Stage = async (ctx: StageContext, row: OnboardingRow): Promise<Result<void>> => {
   const { deps } = ctx;
   const contract = loadContract(deps, row.onboardingId);
@@ -52,6 +61,9 @@ export const indexStage: Stage = async (ctx: StageContext, row: OnboardingRow): 
 
   const stored = deps.ledger.getStepResults(row.onboardingId);
   if (!stored.ok) return stored;
+  const plan = loadMappingPlan(deps, row.onboardingId);
+  if (!plan.ok) return plan;
+  const restricted = plan.value?.restricted === true;
 
   for (const step of INDEX_STEPS) {
     const key = indexStepKey(step.name);
@@ -61,7 +73,11 @@ export const indexStage: Stage = async (ctx: StageContext, row: OnboardingRow): 
     if (!checkpoint.ok) return checkpoint;
 
     const startedMs = deps.clock.nowMs();
-    const outcome = await runStep(step, ctx, row, staging.value, head.value, contract.value);
+    // A restricted onboarding judges the step by its contract; otherwise a step the profile switched off (adapters.knowledgePass, D-08) is recorded disabled before anything runs.
+    const outcome =
+      restricted && step.name !== 'code-graph'
+        ? restrictedStep(step, contract.value)
+        : (profileDisabledStep(deps, step) ?? (await runStep(step, ctx, row, staging.value, head.value, contract.value)));
 
     if (outcome.status === 'absent') {
       const event = deps.ledger.appendEvent({

@@ -4,7 +4,7 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
-import type { ContextHandle, ContextItem, ContextQuery, ContextSource, ExternalRef, Freshness, TokenBudget } from '../../ports/context-source.ts';
+import type { ContextHandle, ContextItem, ContextQuery, ContextRefreshQuery, ContextSource, ExternalRef, Freshness, TokenBudget } from '../../ports/context-source.ts';
 import type { GsdOnboarding } from '../../ports/gsd-onboarding.ts';
 import { currentHead, estimateTokens, freshnessAt, isCitablePath, pathExistsAtHead } from './freshness.ts';
 
@@ -50,7 +50,7 @@ export class GsdIntelContext implements ContextSource {
       port: 'context-source',
       adapter: 'gsd-intel',
       version: '1',
-      capabilities: { find: true, read: true, refresh: false },
+      capabilities: { find: true, read: true, refresh: true },
       offline: true,
     };
   }
@@ -93,11 +93,15 @@ export class GsdIntelContext implements ContextSource {
           estTokens: estimateTokens(excerpt) + estimateTokens(entry.key),
           reason: `matched "${query.term}" in ${match.source}`,
           readRule: 'id-only',
+          // The entries are free text a model derived from the repository, and a hostile repository can commit the files itself: data, never instruction (WR-19).
+          untrusted: true,
         };
-        if (freshness !== 'fresh') {
-          // A stale or changed index still answers; each cited path is confirmed against the repository as it is now.
-          const path = citedPath(match.source, entry.key, entry.value);
-          if (path !== undefined && isCitablePath(path)) {
+        const path = citedPath(match.source, entry.key, entry.value);
+        if (path !== undefined && isCitablePath(path)) {
+          // The assembler confirms this path with `git-files` when the index is not fresh.
+          handle.citedPath = path;
+          if (freshness !== 'fresh') {
+            // A stale or changed index still answers; each cited path is confirmed against the repository as it is now.
             const confirmed = pathExistsAtHead(query.workspace.repoPath, path);
             if (confirmed !== undefined) handle.confirmed = confirmed;
           }
@@ -120,9 +124,26 @@ export class GsdIntelContext implements ContextSource {
         excerpt: found.excerpt,
         estTokens: handle.estTokens,
         reason: handle.reason,
+        untrusted: true,
         ...(handle.confirmed !== undefined ? { confirmed: handle.confirmed } : {}),
+        ...(handle.citedPath !== undefined ? { citedPath: handle.citedPath } : {}),
       });
     }
     return ok(items);
+  }
+
+  // An intel entry is judged like a graph node, from the commit the intel was refreshed at. An entry of the file-roles index is keyed by the repository path it
+  // describes (the part of its ID after the `#`): that file gone at HEAD makes it `deleted`. An entry of another index names no path of its own, so none is
+  // looked for. An index refreshed since the reference was recorded is `changed`; otherwise the commit against HEAD, and the file hashes since the refresh
+  // while they agree, give `fresh`, `stale` or `changed`.
+  async refresh(ref: ExternalRef, query: ContextRefreshQuery): Promise<Result<ExternalRef>> {
+    const retrievedAt = new Date(this.#nowMs()).toISOString();
+    const settled = (freshness: Freshness): Result<ExternalRef> => ok({ ...ref, revision: query.indexRevision, retrievedAt, freshness });
+    const hash = ref.id.indexOf('#');
+    const source = hash < 0 ? ref.id : ref.id.slice(0, hash);
+    const key = hash < 0 ? '' : ref.id.slice(hash + 1);
+    if (source === 'file-roles.json' && key !== '' && isCitablePath(key) && pathExistsAtHead(query.workspace.repoPath, key) === false) return settled('deleted');
+    if (ref.revision !== undefined && ref.revision !== query.indexRevision) return settled('changed');
+    return settled(await this.#freshness({ ...query, term: '' }));
   }
 }

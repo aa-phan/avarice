@@ -502,7 +502,10 @@ describe('start refuses when no admitted GSD is found, and creates nothing (RC-1
       env: { AVARICE_FAKE_HOST: JSON.stringify({ run: FIX }), HOME: emptyHome, CLAUDE_CONFIG_DIR: '', GSD_HOME: '' },
     });
     assert.equal(r.code, 3, r.stderr + r.stdout);
-    assert.match(r.stderr, /^avarice start: refused: GSD 1\.17\.x was not found/);
+    // Plan 04-25: with an active project record, a missing GSD is refused as an incompatible record (still exit 3), naming the absent gsd-core and the
+    // version to reinstall.
+    assert.match(r.stderr, /^avarice start: refused: the active project record of .* is incompatible with the installed GSD: .*no admitted gsd-core is installed/);
+    assert.match(r.stderr, /reinstall GSD 1\.17\.x/);
     assert.equal(rows<{ n: number }>(f.roots, "SELECT COUNT(*) AS n FROM runs WHERE state <> 'onboarding'")[0]?.n, runsBefore, 'no run row');
     assert.equal(existsSync(join(f.roots.AVARICE_DATA_ROOT, 'runs')), false, 'no contract file');
     assert.deepEqual(readdirSync(f.roots.AVARICE_WORK_ROOT).filter((name) => name.startsWith('run_')), [], 'no clone');

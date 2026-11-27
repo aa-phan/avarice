@@ -2,7 +2,7 @@
 // (mergeKnowledgeGraph) and the validation of the merged graph (validateKnowledgeGraph). Pure; no files, no tools.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeKnowledgeGraph } from '../../src/domain/graph-merge.ts';
+import { mergeChangedPaths, mergeKnowledgeGraph, retainedKnowledge } from '../../src/domain/graph-merge.ts';
 import { KNOWLEDGE_LIMITS, documentCoverage, validateKnowledgeGraph } from '../../src/domain/knowledge-validation.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 
@@ -247,17 +247,21 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     assert.deepEqual(problemsOf(validate(graph, stats)), []);
   });
 
-  it('refuses a node that comes from .planning/phases/ or STATE.md, whatever the manifest says', () => {
+  it('accepts a node of the pass that comes from .planning/phases/ or STATE.md when the manifest holds it, and refuses one the manifest does not (plan 04-17, ONB-15)', () => {
     const { graph, stats } = mergedFixture();
     const g = clone(graph);
     nodesOf(g).push({ id: 'phase_plan', label: 'plan', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
-    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
-    assert.match(problemsOf(validateKnowledgeGraph(g, manifest, stats)).join('\n'), /phase_plan.*\.planning\/phases/);
+    nodesOf(g).push({ id: 'state', label: 'state', file_type: 'document', source_file: '.planning/STATE.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
+    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md'), entry('.planning/STATE.md')] };
+    assert.deepEqual(problemsOf(validateKnowledgeGraph(g, manifest, stats)), []);
+    const problems = problemsOf(validateKnowledgeGraph(g, MANIFEST, stats)).join('\n');
+    assert.match(problems, /phase_plan: source ".planning\/phases\/01-x\/01-01-PLAN.md" is not in the manifest/);
+    assert.match(problems, /state: source ".planning\/STATE.md" is not in the manifest/);
   });
 
   // Found by the live exit rehearsal (plan 01-19): the real target tracks code under .planning/phases/ (contrast-check.mjs), so its
   // code graph holds 27 code nodes sourced from there. The rule is about what the knowledge pass may cite, not about the code graph.
-  it('accepts a code-graph node sourced from .planning/phases/ (a tracked script), and still refuses a knowledge-pass node from there', () => {
+  it('accepts a code-graph node sourced from .planning/phases/ (a tracked script), refuses a planning document there, and takes a knowledge-pass node only for a manifest document', () => {
     const { graph, stats } = mergedFixture();
     const g = clone(graph);
     nodesOf(g).push({ id: 'planning_phases_01_x_contrast_check_checkdoc', label: 'checkDoc', file_type: 'code', source_file: '.planning/phases/01-x/contrast-check.mjs' });
@@ -271,11 +275,10 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
     const fromPass = clone(graph);
     nodesOf(fromPass).push({ id: 'phase_note', label: 'note', file_type: 'document', source_file: '.planning/phases/01-x/01-01-PLAN.md', _avarice_origin: 'knowledge-pass', source_revision: REV });
     const manifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/01-01-PLAN.md')] };
-    assert.match(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)).join('\n'), /phase_note.*\.planning\/phases/);
+    assert.deepEqual(problemsOf(validateKnowledgeGraph(fromPass, manifest, stats)), [], 'a phase document of the manifest is a corpus document since plan 04-17');
     const passData = clone(graph);
     nodesOf(passData).push({ id: 'phase_data', label: 'data', file_type: 'document', source_file: '.planning/phases/01-x/fixtures.json', _avarice_origin: 'knowledge-pass', source_revision: REV });
-    const dataManifest: KnowledgeManifest = { ...MANIFEST, entries: [...MANIFEST.entries, entry('.planning/phases/01-x/fixtures.json')] };
-    assert.match(problemsOf(validateKnowledgeGraph(passData, dataManifest, stats)).join('\n'), /phase_data.*\.planning\/phases/, 'anything under .planning/phases/ stays refused for a node the pass added');
+    assert.match(problemsOf(validateKnowledgeGraph(passData, MANIFEST, stats)).join('\n'), /phase_data: source ".*fixtures.json" is not in the manifest/, 'a file the manifest does not hold is refused for a node the pass added');
   });
 
   it('refuses a dangling share above 10 percent, accepts exactly 10, and counts against the edges the pass produced', () => {
@@ -301,13 +304,13 @@ describe('validateKnowledgeGraph (docs/repository-onboarding.md "Validation", Do
   });
 });
 
-describe('validateKnowledgeGraph: the corpus never holds .planning/STATE.md or phase files (S-45)', () => {
-  it('refuses a node sourced from STATE.md or from .planning/phases, whatever its origin', () => {
+describe('validateKnowledgeGraph: the code graph does not hold .planning/STATE.md or phase documents (S-45, plan 04-17)', () => {
+  it('refuses a node of the code graph sourced from STATE.md or from a document under .planning/phases', () => {
     const { graph, stats } = mergedFixture();
     for (const source of ['.planning/STATE.md', '.planning/phases/01-x/01-01-PLAN.md']) {
       const sourced = clone(graph);
       (byId(sourced, 'src_store_db') as Json)['source_file'] = source;
-      assert.match(problemsOf(validate(sourced, stats)).join('\n'), /src_store_db: sourced from .*which the corpus never holds/, source);
+      assert.match(problemsOf(validate(sourced, stats)).join('\n'), /src_store_db: sourced from .*a planning document the code graph does not hold/, source);
     }
   });
 });
@@ -403,5 +406,172 @@ describe('documentCoverage and the coverage rule (G-01-154, plan 01-25)', () => 
     assert.ok(result.valid, problemsOf(result).join('; '));
     assert.deepEqual(result.coverage, { expected: 3, covered: ['.planning/PROJECT.md', 'docs/guide.md'], unread: ['docs/decisions/ADR-001-storage.md'] });
     assert.equal(KNOWLEDGE_LIMITS.documentShare, 0.5);
+  });
+});
+
+// Plan 04-17 (ONB-11, D-11, spike S4-B): the code graph of an incremental refresh. The extraction is the whole tree's (a path-subset extraction loses the
+// edges that leave the extracted set); mergeChangedPaths applies it against the previous graph and reports the node-level diff.
+describe('mergeChangedPaths: the previous graph, a whole-tree extraction and the changed paths (ONB-11)', () => {
+  const code = (id: string, file: string, extra: Json = {}): Json => ({ id, label: id, file_type: 'code', source_file: file, _origin: 'ast', ...extra });
+  const rel = (source: string, target: string, relation = 'imports'): Json => ({ source, target, relation, confidence: 'EXTRACTED', confidence_score: 1, _origin: 'ast' });
+  const graphOf = (nodes: Json[], links: Json[], extra: Json = {}): Json => ({ directed: false, multigraph: false, graph: {}, built_at_commit: PIN, nodes, links, ...extra });
+  const react = (): Json => ({ id: 'ref_react', label: 'react', file_type: 'code' });
+
+  // Three files: app.ts imports lib.ts and the external package `ref_react`; util.ts calls into lib.ts.
+  const previous = (): Json =>
+    graphOf(
+      [code('app', 'src/app.ts', { community: 0 }), code('lib', 'src/lib.ts', { community: 0 }), code('util', 'src/util.ts', { community: 1 }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')],
+    );
+  const keysOf = (g: Json): string[] => linksOf(g).map((l) => `${l['source']}>${l['target']}:${l['relation']}`).sort();
+
+  it('replaces the changed file\'s nodes and edges and keeps every edge that crosses the boundary, new ones included', () => {
+    // app.ts now also imports util.ts and a new function calls into lib.ts: two new edges whose other end is outside the changed set.
+    const extracted = graphOf(
+      [code('app', 'src/app.ts', { community: 0 }), code('app_run', 'src/app.ts', { community: 0 }), code('lib', 'src/lib.ts', { community: 0 }), code('util', 'src/util.ts', { community: 1 }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('app', 'util'), rel('app_run', 'lib', 'calls'), rel('util', 'lib', 'calls')],
+    );
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'app_run', 'lib', 'util', 'ref_react']);
+    assert.deepEqual(keysOf(graph), ['app>lib:imports', 'app>ref_react:imports', 'app>util:imports', 'app_run>lib:calls', 'util>lib:calls']);
+    assert.equal(delta.nodesAdded, 1);
+    assert.equal(delta.nodesRemoved, 0);
+    assert.equal(delta.edgesAdded, 2);
+    assert.equal(delta.boundaryEdgesAdded, 2, 'both new edges leave the changed file');
+    assert.equal(delta.boundaryEdgesRemoved, 0);
+    assert.equal(delta.outside, 0);
+    assert.equal(delta.nodesKept, 3, 'lib, util and ref_react are the previous graph\'s');
+  });
+
+  it('drops the edges that ended at a node of a changed file that is gone, from unchanged files too', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('lib2', 'src/lib.ts'), code('util', 'src/util.ts'), react()], [rel('app', 'lib2'), rel('app', 'ref_react')]);
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/lib.ts'], deletedPaths: [] });
+    assert.deepEqual(keysOf(graph), ['app>lib2:imports', 'app>ref_react:imports'], 'the edges that ended at the old lib node are gone');
+    assert.equal(delta.nodesRemoved, 1);
+    assert.equal(delta.nodesAdded, 1);
+    assert.equal(delta.edgesRemoved, 2, 'app>lib and util>lib ended at a node that no longer exists');
+    assert.equal(delta.boundaryEdgesRemoved, 2);
+  });
+
+  it('removes the nodes of a deleted file and the edges that ended at them, and an external node nothing refers to any more', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('util', 'src/util.ts')], [rel('app', 'util')]);
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/lib.ts', 'src/app.ts'], deletedPaths: ['src/lib.ts'] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'util']);
+    assert.deepEqual(keysOf(graph), ['app>util:imports']);
+    assert.equal(delta.nodesRemoved, 2, 'lib and ref_react');
+    assert.equal(delta.outside, 0, 'ref_react has no file, so it is not a change outside the paths');
+  });
+
+  it('is the extraction: a file outside the changed paths whose nodes differ from the previous graph is reported, and the graph still follows the extraction', () => {
+    const extracted = graphOf(
+      [code('app', 'src/app.ts'), code('lib', 'src/lib.ts'), code('util', 'src/util.ts', { label: 'changed behind our back' }), react()],
+      [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')],
+    );
+    const { graph, delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(byId(graph, 'util')?.['label'], 'changed behind our back');
+    assert.equal(delta.outside, 1);
+  });
+
+  it('treats the clustering keys as derived: a node whose only difference is its community is unchanged', () => {
+    const extracted = previous();
+    for (const node of nodesOf(extracted)) if (node['community'] !== undefined) node['community'] = 7;
+    const { delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(delta.outside, 0);
+    assert.equal(delta.nodesAdded + delta.nodesRemoved + delta.edgesAdded + delta.edgesRemoved, 0);
+  });
+
+  it('spells a path the way the graph does: a leading ./ and backslashes make no difference', () => {
+    const extracted = graphOf([code('app', './src\\app.ts', { label: 'new' }), code('lib', 'src/lib.ts'), code('util', 'src/util.ts'), react()], [rel('app', 'lib'), rel('app', 'ref_react'), rel('util', 'lib', 'calls')]);
+    const { delta } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(delta.outside, 0);
+  });
+
+  it('does not mutate its inputs, repeats exactly and keeps the other keys of the extraction', () => {
+    const prev = previous();
+    const extracted = graphOf([code('app', 'src/app.ts')], [], { hyperedges: [{ id: 'h' }] });
+    const before = JSON.stringify([prev, extracted]);
+    const one = mergeChangedPaths({ previous: prev, extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    const two = mergeChangedPaths({ previous: prev, extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.equal(JSON.stringify([prev, extracted]), before);
+    assert.deepEqual(one, two);
+    assert.deepEqual(one.graph['hyperedges'], [{ id: 'h' }]);
+    assert.equal(one.graph['built_at_commit'], PIN);
+  });
+
+  it('emits no duplicate node and no duplicate edge', () => {
+    const extracted = graphOf([code('app', 'src/app.ts'), code('app', 'src/app.ts'), code('lib', 'src/lib.ts')], [rel('app', 'lib'), rel('app', 'lib')]);
+    const { graph } = mergeChangedPaths({ previous: previous(), extracted, changedPaths: ['src/app.ts'], deletedPaths: [] });
+    assert.deepEqual(nodesOf(graph).map((n) => n['id']), ['app', 'lib']);
+    assert.equal(linksOf(graph).length, 1);
+  });
+});
+
+// Plan 04-17 (ONB-15, S-47): the nodes of the documents a refresh does not extract again.
+describe('retainedKnowledge: the document nodes of the unchanged documents (ONB-15)', () => {
+  const pass = { _avarice_origin: 'knowledge-pass' };
+  const document = (id: string, path: string, extra: Json = {}): Json => ({ id, label: id, file_type: 'document', source_file: path, source_revision: `git:${'a'.repeat(40)}`, ...pass, ...extra });
+  const link = (source: string, target: string, extra: Json = {}): Json => ({ source, target, relation: 'documents', confidence: 'INFERRED', confidence_score: 0.7, ...pass, ...extra });
+  const previous = (): Json => ({
+    nodes: [
+      { id: 'a', label: 'a', file_type: 'code', source_file: 'src/index.ts' },
+      document('docs_guide', 'docs/guide.md', { community: 3, community_name: 'Community 3' }),
+      document('docs_adr', 'docs/adr.md'),
+      document('concept_state', 'docs/guide.md', { file_type: 'concept' }),
+    ],
+    links: [
+      link('docs_guide', 'a', { source_file: 'docs/guide.md' }),
+      link('docs_adr', 'a', { source_file: 'docs/adr.md' }),
+      link('docs_guide', 'docs_adr'),
+      link('docs_guide', 'gone_code'),
+      link('concept_state', 'docs_guide'),
+      { source: 'a', target: 'a', relation: 'calls', confidence: 'EXTRACTED' },
+    ],
+  });
+  const keep = new Set(['docs/guide.md']);
+  const code = new Set(['a']);
+
+  it('keeps the pass\'s nodes that cite a kept document and the edges between them and the code graph, without the clustering keys', () => {
+    const { nodes, edges } = retainedKnowledge(previous(), keep, code);
+    assert.deepEqual(nodes.map((n) => n['id']), ['docs_guide', 'concept_state']);
+    assert.equal(nodes[0]?.['community'], undefined);
+    assert.equal(nodes[0]?.['community_name'], undefined);
+    assert.equal(nodes[0]?.['source_file'], 'docs/guide.md');
+    assert.deepEqual(edges.map((e) => `${e['source']}>${e['target']}`), ['docs_guide>a', 'concept_state>docs_guide']);
+  });
+
+  it('drops the edges of a changed document and an edge whose other end is a re-extracted document or a code node the new tree lacks, and counts the last two', () => {
+    const { edges, droppedEdges } = retainedKnowledge(previous(), keep, code);
+    assert.equal(edges.some((e) => e['source'] === 'docs_adr'), false, 'an edge found in a changed document goes');
+    assert.equal(edges.some((e) => e['target'] === 'gone_code'), false, 'a code node the new tree lacks goes with its edge');
+    assert.equal(droppedEdges, 2, 'docs_guide>docs_adr and docs_guide>gone_code');
+  });
+
+  it('keeps nothing when no document is kept, ignores a node or edge the pass did not add, and accepts the spellings a skill uses for a path', () => {
+    assert.deepEqual(retainedKnowledge(previous(), new Set(), code), { nodes: [], edges: [], droppedEdges: 0 });
+    const spelled: Json = {
+      nodes: [document('x', './docs/guide.md'), document('y', '/work/staging/.avarice-knowledge/docs/guide.md'), { id: 'z', file_type: 'document', source_file: 'docs/guide.md' }],
+      links: [link('x', 'y', { source_file: '.avarice-knowledge/docs/guide.md' }), { source: 'x', target: 'y', relation: 'documents' }],
+    };
+    const out = retainedKnowledge(spelled, keep, code);
+    assert.deepEqual(out.nodes.map((n) => n['id']), ['x', 'y'], 'z carries no origin of the pass');
+    assert.equal(out.edges.length, 1);
+  });
+
+  it('does not mutate the previous graph', () => {
+    const prev = previous();
+    const before = JSON.stringify(prev);
+    retainedKnowledge(prev, keep, code);
+    assert.equal(JSON.stringify(prev), before);
+  });
+
+  it('feeds mergeKnowledgeGraph: the kept document is re-stamped with the new manifest\'s revision and its edge reaches the new code graph', () => {
+    const kept = retainedKnowledge(previous(), keep, new Set(['src_store_db']));
+    const reached = retainedKnowledge({ ...previous(), links: [link('docs_guide', 'src_store_db', { source_file: 'docs/guide.md' })] }, keep, new Set(['src_store_db']));
+    const manifest: KnowledgeManifest = { ...MANIFEST, entries: [entry('docs/guide.md')] };
+    const { graph, stats } = mergeKnowledgeGraph({ code: codeGraph(), docs: { nodes: reached.nodes, links: reached.edges }, manifest, onboardedRevision: PIN });
+    assert.equal(byId(graph, 'docs_guide')?.['source_revision'], REV);
+    assert.equal(stats.dropped.dangling, 0);
+    assert.ok(linksOf(graph).some((l) => l['source'] === 'docs_guide' && l['target'] === 'src_store_db'));
+    assert.equal(kept.nodes.length, 2);
   });
 });

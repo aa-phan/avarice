@@ -28,9 +28,10 @@ export interface ProjectStatus {
   onboardedRevision: string | null;
   mapping: Readonly<Record<string, unknown>> | null;
   indexes: Readonly<Record<string, unknown>>;
-  // Plan 02-15 (D-19): the project's runs, present only when the project has any, and always the last key. Every key above is the
-  // Phase 1 shape and is unchanged.
+  // Plan 02-15 (D-19): the project's runs, present only when the project has any. Every key above is the Phase 1 shape and is unchanged.
   runs?: RunStatus[];
+  // Plan 04-24 (CON-4, D-12): present only, and then `true`, when the active record's map was made by `onboard --restricted`. Appended after `runs`, so every key above keeps its place.
+  restricted?: true;
 }
 
 function asObject(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -78,6 +79,7 @@ export function getStatus(ledger: Ledger, nowMs: number): Result<ProjectStatus[]
       mapping: record ? asObject(record.body['mapping']) : null,
       indexes: record ? (asObject(record.body['indexes']) ?? {}) : {},
       ...(runs.value.length > 0 ? { runs: runs.value } : {}),
+      ...(record !== null && record.body['restricted'] === true ? { restricted: true as const } : {}),
     });
   }
   return ok(entries);

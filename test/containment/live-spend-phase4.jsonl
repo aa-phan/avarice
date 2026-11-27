@@ -1,0 +1,94 @@
+{"plan":"04-34","case":"01-edit-src","costUsd":0.0028380000000000002,"claudeVersion":"2.1.326","at":"2026-11-17T18:37:51.547Z"}
+{"plan":"04-34","case":"02-write-src","costUsd":0.0023950300000000002,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:07.690Z"}
+{"plan":"04-34","case":"03-echo-redirect","costUsd":0.0025763,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:13.924Z"}
+{"plan":"04-34","case":"04-python-write","costUsd":0.0025509400000000002,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:19.649Z"}
+{"plan":"04-34","case":"05-node-write","costUsd":0.00259942,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:25.624Z"}
+{"plan":"04-34","case":"06a-standin-policy","costUsd":0.00338957,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:33.656Z"}
+{"plan":"04-34","case":"06b-settings-sandbox-only","costUsd":0.0030228800000000004,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:41.503Z"}
+{"plan":"04-34","case":"07-subagent-write","costUsd":0.00673586,"claudeVersion":"2.1.326","at":"2026-11-17T18:38:54.379Z"}
+{"plan":"04-34","case":"08-git-refs","costUsd":0.0033101899999999997,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:02.866Z"}
+{"plan":"04-34","case":"09-secret-reads","costUsd":0.0031651399999999994,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:12.015Z"}
+{"plan":"04-34","case":"10-curl","costUsd":0.0023959100000000002,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:16.698Z"}
+{"plan":"04-34","case":"11-missing-hook-script","costUsd":0.0030254,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:22.013Z"}
+{"plan":"04-34","case":"13-positive-control","costUsd":0.0024613900000000004,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:30.560Z"}
+{"plan":"04-34","case":"15-compound-with-hook","costUsd":0.00246139,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:35.708Z"}
+{"plan":"04-34","case":"16-compound-host-only","costUsd":0.0024210800000000004,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:40.170Z"}
+{"plan":"04-34","case":"18-gsd-preamble-compound","costUsd":0.00400099,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:50.187Z"}
+{"plan":"04-34","case":"17-sandbox-only-writes","costUsd":0.00391428,"claudeVersion":"2.1.326","at":"2026-11-17T18:39:59.566Z"}
+{"plan":"04-34","case":"14-fast-onboarding","costUsd":0.039115805000000003,"claudeVersion":"2.1.326","at":"2026-11-17T18:42:20.549Z"}
+{"plan":"04-34","case":"19-knowledge-onboarding","costUsd":0.050792224999999996,"claudeVersion":"2.1.326","at":"2026-11-17T18:45:54.645Z"}
+{"plan":"04-34","case":"p4-restricted-run","costUsd":0.00483598,"claudeVersion":"2.1.326","at":"2026-11-17T18:46:45.262Z"}
+{"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0025031899999999998,"claudeVersion":"2.1.326","at":"2026-11-17T18:47:13.834Z"}
+{"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0031211500000000005,"claudeVersion":"2.1.326","at":"2026-11-17T18:49:07.253Z"}
+{"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.0024973,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:01.609Z"}
+{"plan":"04-34","case":"p4-run-privileged-denial","costUsd":0.0046260599999999995,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:47.301Z"}
+{"plan":"04-34","case":"p4-attended-approve:deny","costUsd":0.0016811500000000002,"claudeVersion":"2.1.326","at":"2026-11-17T23:11:57.270Z"}
+{"plan":"04-34","case":"p4-attended-approve:allow","costUsd":0.0005159800000000001,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:00.806Z"}
+{"plan":"04-34","case":"p4-hook-input-capture","costUsd":0.0025576600000000007,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:17.785Z"}
+{"plan":"04-34","case":"p4-agent-broad-search","costUsd":0.00414577,"claudeVersion":"2.1.326","at":"2026-11-17T23:12:38.009Z"}
+{"plan":"04-34","case":"p4-restricted-onboarding","costUsd":0.016334115,"claudeVersion":"2.1.326","at":"2026-11-18T02:15:31.467Z"}
+{"plan":"04-35","case":"ac14-aa-phan-portfolio-v2","costUsd":0.425173,"claudeVersion":"2.1.326","at":"2026-11-18T03:13:54.438Z"}
+{"plan":"04-35","case":"ac14-auto_search_workflow","costUsd":0.197445,"claudeVersion":"2.1.326","at":"2026-11-18T03:18:07.494Z"}
+{"plan":"04-35","case":"ac14-auto_search_workflow","costUsd":0.974252,"claudeVersion":"2.1.326","at":"2026-11-18T07:29:58.133Z"}
+{"plan":"04-35","case":"ac14-aa-phan-portfolio-v2","costUsd":0.938701,"claudeVersion":"2.1.326","at":"2026-11-18T07:41:31.377Z"}
+{"plan":"04-35","case":"ac14-aa-phan-portfolio-v2","costUsd":0.654371,"claudeVersion":"2.1.326","at":"2026-11-18T08:18:54.476Z"}
+{"plan":"04-35","case":"ac14-GroceriesGPT","costUsd":0.117375,"claudeVersion":"2.1.326","at":"2026-11-18T08:21:18.989Z"}
+{"plan":"04-35","case":"ac14-GroceriesGPT","costUsd":0.154992,"claudeVersion":"2.1.326","at":"2026-11-18T18:57:18.010Z"}
+{"plan":"04-35","case":"ac14-spf13-cobra","costUsd":0.11158,"claudeVersion":"2.1.326","at":"2026-11-18T19:01:59.526Z"}
+{"plan":"04-35","case":"ac14-BurntSushi-ripgrep","costUsd":0.166796,"claudeVersion":"2.1.326","at":"2026-11-18T19:08:30.400Z"}
+{"plan":"04-36","case":"eval-T01-A-map","costUsd":0.07777076000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:10:06.438Z"}
+{"plan":"04-36","case":"eval-T01-A-onboard","costUsd":0.07390085999999998,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:14:42.059Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.07625149,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:20:34.392Z"}
+{"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.6574211199999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T05:30:12.046Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.08386034,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T17:55:58.245Z"}
+{"plan":"04-36","case":"eval-T01-A-map","costUsd":0.05386458,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:06:12.282Z"}
+{"plan":"04-36","case":"eval-T01-A-onboard","costUsd":0.07607904000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:10:19.757Z"}
+{"plan":"04-36","case":"eval-T01-A-run","costUsd":0.22764552,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:23:32.351Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.06950935999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:27:31.982Z"}
+{"plan":"04-36","case":"eval-T01-B-run","costUsd":0.26532667499999985,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:40:29.924Z"}
+{"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.6362138900000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:50:15.380Z"}
+{"plan":"04-36","case":"eval-T01-C-run","costUsd":0.006754840000000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-19T18:51:07.709Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.077659675,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:18:46.089Z"}
+{"plan":"04-36","case":"eval-T01-B-run","costUsd":0.124796915,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:25:55.003Z"}
+{"plan":"04-36","case":"eval-T01-A-map","costUsd":0.09483314,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:36:59.596Z"}
+{"plan":"04-36","case":"eval-T01-A-onboard","costUsd":0.07960252999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:42:05.504Z"}
+{"plan":"04-36","case":"eval-T01-A-run","costUsd":0.11429980500000005,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:49:18.205Z"}
+{"plan":"04-36","case":"eval-T01-B-onboard","costUsd":0.083021395,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T02:54:45.773Z"}
+{"plan":"04-36","case":"eval-T01-B-run","costUsd":0.11852715999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:03:35.087Z"}
+{"plan":"04-36","case":"eval-T01-C-onboard","costUsd":0.601340935,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:12:53.299Z"}
+{"plan":"04-36","case":"eval-T01-C-run","costUsd":0.20840664499999995,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:21:34.563Z"}
+{"plan":"04-36","case":"eval-T02-A-map","costUsd":0.06309529,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:25:36.734Z"}
+{"plan":"04-36","case":"eval-T02-A-onboard","costUsd":0.131936945,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:31:24.154Z"}
+{"plan":"04-36","case":"eval-T02-A-run","costUsd":0.16810566000000002,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:40:44.730Z"}
+{"plan":"04-36","case":"eval-T02-B-onboard","costUsd":0.2618651,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:47:14.545Z"}
+{"plan":"04-36","case":"eval-T02-B-run","costUsd":0.21330127499999993,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T03:55:20.271Z"}
+{"plan":"04-36","case":"eval-T02-C-onboard","costUsd":1.1,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:05:12.000Z"}
+{"plan":"04-36","case":"eval-T02-C-run","costUsd":0.12280415499999998,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:13:12.054Z"}
+{"plan":"04-36","case":"eval-T03-A-map","costUsd":0.193580415,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:19:29.287Z"}
+{"plan":"04-36","case":"eval-T03-A-onboard","costUsd":0.06605421,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:23:48.004Z"}
+{"plan":"04-36","case":"eval-T03-A-run","costUsd":0.281385585,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:35:24.708Z"}
+{"plan":"04-36","case":"eval-T03-B-onboard","costUsd":0.130872625,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:41:14.753Z"}
+{"plan":"04-36","case":"eval-T03-B-run","costUsd":0.144032435,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T04:49:28.211Z"}
+{"plan":"04-36","case":"eval-T03-C-onboard","costUsd":0.7484204149999998,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:00:21.543Z"}
+{"plan":"04-36","case":"eval-T03-C-run","costUsd":0.11305621,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:08:27.477Z"}
+{"plan":"04-36","case":"eval-T04-A-map","costUsd":0.08449173,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:14:18.658Z"}
+{"plan":"04-36","case":"eval-T04-A-onboard","costUsd":0.06843166999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:18:37.145Z"}
+{"plan":"04-36","case":"eval-T04-A-run","costUsd":0.19664181500000003,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:26:31.600Z"}
+{"plan":"04-36","case":"eval-T04-B-onboard","costUsd":0.07974027000000002,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:31:32.917Z"}
+{"plan":"04-36","case":"eval-T04-B-run","costUsd":0.126188515,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:40:58.519Z"}
+{"plan":"04-36","case":"eval-T04-C-onboard","costUsd":1.1,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T05:53:04.071Z"}
+{"plan":"04-36","case":"eval-T04-C-run","costUsd":0.15742621999999995,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:00:28.026Z"}
+{"plan":"04-36","case":"eval-T05-A-map","costUsd":0.08325354500000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:05:41.923Z"}
+{"plan":"04-36","case":"eval-T05-A-onboard","costUsd":0.07709041500000002,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:10:07.708Z"}
+{"plan":"04-36","case":"eval-T05-A-run","costUsd":0.18241809000000003,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:19:46.975Z"}
+{"plan":"04-36","case":"eval-T05-B-onboard","costUsd":0.09147263,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:25:47.714Z"}
+{"plan":"04-36","case":"eval-T05-B-run","costUsd":0.12915386499999998,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:35:37.769Z"}
+{"plan":"04-36","case":"eval-T05-C-onboard","costUsd":0.70656445,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:46:18.597Z"}
+{"plan":"04-36","case":"eval-T05-C-run","costUsd":0.15423142999999992,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T06:55:49.259Z"}
+{"plan":"04-36","case":"eval-T06-A-map","costUsd":0.07343701999999999,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:00:35.957Z"}
+{"plan":"04-36","case":"eval-T06-A-onboard","costUsd":0.126883935,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:05:42.206Z"}
+{"plan":"04-36","case":"eval-T06-A-run","costUsd":0.11635724500000003,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:13:52.709Z"}
+{"plan":"04-36","case":"eval-T06-B-onboard","costUsd":0.057269705000000004,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:17:37.606Z"}
+{"plan":"04-36","case":"eval-T06-B-run","costUsd":0.10300309500000002,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:24:05.637Z"}
+{"plan":"04-36","case":"eval-T06-C-onboard","costUsd":0.7192036700000001,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:34:14.428Z"}
+{"plan":"04-36","case":"eval-T06-C-run","costUsd":0.11036829500000005,"claudeVersion":"2.1.326 (Claude Code)","at":"2026-11-20T07:41:50.571Z"}

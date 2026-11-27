@@ -12,7 +12,8 @@ import { AVARICE_TRACKED_WRITABLE, scopeViolationsOf, writeSetsFor } from '../..
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import { loadIndexResults } from './index-steps.ts';
 import type { Stage, StageContext } from './stage.ts';
-import { EXTRA_MAP_FILE_REASON, effectiveMappingMode, extraMapFiles, loadAcceptedValidation, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import { EXTRA_MAP_FILE_REASON, effectiveMappingMode, extraMapFiles, loadAcceptedValidation, loadMappingPlan, loadContract, readMapDocuments, stagingPathOf } from './shared.ts';
+import type { StoredMappingPlan } from './shared.ts';
 
 const STORE = 'local';
 // Artifacts of an onboarding live as long as the record that references them (docs/contracts-and-state.md
@@ -49,6 +50,14 @@ function narrowRepositoryProposal(ctx: StageContext, staging: string): Result<{ 
     narrowed: result,
     findings: result.rejected.map((r) => ({ source: 'narrowing' as const, field: r.field, reason: r.reason, detail: r.value })),
   });
+}
+
+// The record's `existingState`: what preflight classified, with the outcome and drift verdict the workspace stage reached in staging (preflight
+// reads the checkout only, so it cannot know the drift of a complete stamped map).
+function existingStateOf(preflight: unknown, plan: StoredMappingPlan | null): Record<string, unknown> {
+  const base = isObject(preflight) ? { ...preflight } : {};
+  if (plan === null) return base;
+  return { ...base, ...(plan.outcome !== undefined ? { outcome: plan.outcome } : {}), ...(plan.drift !== undefined ? { drift: plan.drift } : {}) };
 }
 
 // An earlier attempt that validation rejected and a remap then fixed is part of the record's history.
@@ -135,6 +144,8 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
   }
   const mode = effectiveMappingMode(deps, row.onboardingId, contract.value.body);
   if (!mode.ok) return mode;
+  const plan = loadMappingPlan(deps, row.onboardingId);
+  if (!plan.ok) return plan;
   const documents = readMapDocuments(deps.staging, staging.value, mode.value);
   if (!documents.ok) return documents;
   const extra = extraMapFiles(deps, staging.value, contract.value.body.workspace.baseRevision, documents.value);
@@ -217,17 +228,19 @@ export const activateStage: Stage = (ctx: StageContext, row: OnboardingRow): Res
     stagingPath: staging.value,
     codebase,
     snapshot: manifestStored.value.digest,
-    mapping: { mode: mode.value, scope: validated.value?.scope ?? ['.'], mappedAt: mapped },
+    mapping: { mode: mode.value, scope: validated.value?.scope ?? ['.'], mappedAt: mapped, ...(mode.value === 'adopt' ? { provenance: 'adopted' as const } : {}) },
     notMapped: strings(preflight['notMapped']),
     ...(gsdVersion !== undefined ? { gsdVersion } : {}),
     gsd: { config: appliedConfig(configured), capabilities },
-    existingState: isObject(preflight['existingState']) ? preflight['existingState'] : {},
+    existingState: existingStateOf(preflight['existingState'], plan.value),
     instructionFiles: strings(preflight['instructionFiles']),
     findings,
     contract: { runId: contract.value.runId, version: contract.value.version, digest: contract.value.digest },
     paths: proposal.value.narrowed.accepted.paths,
     commands: proposal.value.narrowed.accepted.commands,
     indexes: foldIndexResults(indexResults.value),
+    // The map was made under the restricted launch: the record says so, and completeness stays what a fast map is, partial (plan 04-24; CON-4, T-04-65).
+    ...(plan.value?.restricted === true ? { restricted: true } : {}),
   });
 
   const activated = ctx.activate(row, record as unknown as Readonly<Record<string, unknown>>);

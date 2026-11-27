@@ -671,3 +671,71 @@ describe('restorePaths, removeUntracked and diffCommits (plan 02-13; D-17, the a
     assert.equal(mustFail(ws.diffCommits(info.path, repo.head, '--output=x')).kind, 'invalid');
   });
 });
+
+// ---- patch(): out-of-scope files are left out literally (plan 04-58; GWR-04, CON-4) ---------------------------------------------------------
+
+describe('CloneRunWorkspace.patch excludePaths (GWR-04, CON-4, T-04-153, T-04-154)', () => {
+  const headersOf = (patch: string): string[] => patch.split('\n').filter((line) => line.startsWith('diff --git '));
+  const ODD_NAMES = ['a b.txt', 'x@y.txt', 'c++.txt', 'Café.md', 'notes (copy).md', '[x].md', '-dash.md', '*.md'];
+
+  function cloneWithEdit(): string {
+    const repo = scratch();
+    const info = prepared(repo, tempDir('avarice-runws-'));
+    write(info.path, 'src/a.ts', 'export const a = 2;\n');
+    return info.path;
+  }
+
+  it('leaves each of the odd file names out and keeps the in-scope hunk', () => {
+    const clone = cloneWithEdit();
+    for (const name of ODD_NAMES) write(clone, name, `content of ${name}\n`);
+    const patch = must(ws.patch(clone, { exclude: [], excludePaths: ODD_NAMES }));
+    assert.deepEqual(headersOf(patch), ['diff --git a/src/a.ts b/src/a.ts']);
+    for (const name of ODD_NAMES) assert.ok(!patch.includes(`content of ${name}`), `no content of ${name}`);
+  });
+
+  it('without the exclusion every one of those names has a hunk, so the case above proves the exclusion and not an unreadable name', () => {
+    const clone = cloneWithEdit();
+    for (const name of ODD_NAMES) write(clone, name, `content of ${name}\n`);
+    const patch = must(ws.patch(clone, { exclude: [] }));
+    for (const name of ODD_NAMES) assert.ok(patch.includes(`content of ${name}`), `the content of ${name} is in the unfiltered patch`);
+  });
+
+  it('reads `*.md` as a file name and not as a glob: another .md file keeps its hunk', () => {
+    const clone = cloneWithEdit();
+    write(clone, '*.md', 'star file\n');
+    write(clone, 'keep.md', 'kept file\n');
+    const patch = must(ws.patch(clone, { exclude: [], excludePaths: ['*.md'] }));
+    assert.deepEqual(headersOf(patch).sort(), ['diff --git a/keep.md b/keep.md', 'diff --git a/src/a.ts b/src/a.ts']);
+    assert.ok(!patch.includes('star file') && patch.includes('kept file'));
+  });
+
+  it('reads a `[x].md` entry as a file name and not as a character class: `x.md` keeps its hunk', () => {
+    const clone = cloneWithEdit();
+    write(clone, '[x].md', 'bracket file\n');
+    write(clone, 'x.md', 'plain x file\n');
+    const patch = must(ws.patch(clone, { exclude: [], excludePaths: ['[x].md'] }));
+    assert.ok(!patch.includes('bracket file') && patch.includes('plain x file'));
+  });
+
+  it('refuses an entry that is empty, absolute, holds NUL or has a `..` segment with kind invalid, naming excludePaths, and still refuses a bad exclude directory', () => {
+    const clone = cloneWithEdit();
+    for (const bad of ['', '/etc/passwd', 'a/../b', '../out.txt', 'a\0b']) {
+      const error = mustFail(ws.patch(clone, { exclude: [], excludePaths: ['ok.txt', bad] }));
+      assert.equal(error.kind, 'invalid', JSON.stringify(bad));
+      assert.equal(error.field, 'excludePaths', JSON.stringify(bad));
+    }
+    const dir = mustFail(ws.patch(clone, { exclude: ['a b'] }));
+    assert.equal(dir.kind, 'invalid');
+    assert.equal(dir.field, 'exclude');
+    assert.equal(mustFail(ws.patch(clone, { exclude: ['../x'] })).kind, 'invalid');
+  });
+
+  it('gives the same output with no excludePaths, an empty list, and the plain git diff of a modified tracked file', () => {
+    const clone = cloneWithEdit();
+    const bare = must(ws.patch(clone, { exclude: [] }));
+    assert.equal(must(ws.patch(clone, { exclude: [], excludePaths: [] })), bare);
+    const expected = execFileSync('git', ['diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD'], { cwd: clone, encoding: 'utf8' });
+    assert.equal(bare, expected);
+    assert.equal(must(ws.patch(clone, { exclude: ['src'] })), '', 'a directory exclusion still removes the directory');
+  });
+});

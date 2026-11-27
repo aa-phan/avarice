@@ -27,7 +27,7 @@ import type { CliRoots } from './run-cli.ts';
 const TEST_CLI = join(REPO_ROOT, 'test', 'helpers', 'test-cli.ts');
 
 export const RUN_REPO_FILES: Readonly<Record<string, string>> = {
-  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test test/"\n  }\n}\n',
+  'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node --test \\"test/**/*.test.ts\\""\n  }\n}\n',
   'src/slug.ts': [
     '// Turns a title into a URL slug.',
     'export function slugify(title: string): string {',

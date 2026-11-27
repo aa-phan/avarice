@@ -47,6 +47,9 @@ export interface Brief {
   model?: BriefModel;
   baseRevision?: string;
   expectedDecisions?: number;
+  // The owner's authorization of one whole-repository discovery in the run (plan 04-28; CON-10). Absent unless the frontmatter says `broadDiscovery: true`
+  // (`false` is the same as absent), so the digest of a brief that never named it is the one it had before.
+  broadDiscovery?: true;
   // Absent when the brief has no `items` frontmatter: the compiler then emits the single item A.
   items?: BriefItem[];
   source: BriefSource;
@@ -65,7 +68,7 @@ export const BRIEF_LIMITS = {
 
 const SIZES: readonly string[] = ['small', 'medium', 'large'];
 const MODELS: readonly string[] = ['haiku', 'sonnet', 'opus'];
-const FRONTMATTER_KEYS: readonly string[] = ['title', 'size', 'model', 'baseRevision', 'expectedDecisions', 'items'];
+const FRONTMATTER_KEYS: readonly string[] = ['title', 'size', 'model', 'baseRevision', 'expectedDecisions', 'items', 'broadDiscovery'];
 const SECTIONS: Readonly<Record<string, string>> = {
   behavior: 'behavior',
   'acceptance criteria': 'acceptance',
@@ -394,6 +397,9 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
   if (front.baseRevision !== undefined && !/^[0-9a-fA-F]{7,40}$/.test(front.baseRevision)) {
     return invalid('brief.baseRevision', 'must be 7 to 40 hexadecimal digits');
   }
+  if (front.broadDiscovery !== undefined && front.broadDiscovery !== 'true' && front.broadDiscovery !== 'false') {
+    return invalid('brief.broadDiscovery', 'must be true or false');
+  }
 
   const behavior = (sections.get('behavior') ?? []).join('\n').trim();
   if (behavior === '') return invalid('brief.behavior', 'is required: add a "## Behavior" section that says what should change');
@@ -441,6 +447,7 @@ export function parseBrief(text: string, source: BriefSource): Result<Brief> {
   if (front.model !== undefined) content.model = front.model as BriefModel;
   if (front.baseRevision !== undefined) content.baseRevision = front.baseRevision.toLowerCase();
   if (expectedDecisions !== undefined) content.expectedDecisions = expectedDecisions;
+  if (front.broadDiscovery === 'true') content.broadDiscovery = true;
   // Set only when the brief has items, so the digest of a brief without them is the one it had before items existed.
   if (items !== undefined) content.items = items;
   return ok({ ...content, source, digest: digestOf(content) });

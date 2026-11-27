@@ -16,6 +16,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type {
   CommitInput,
   DiscardResult,
@@ -202,7 +203,37 @@ const sameEntry = (a: TreeEntry | undefined, b: TreeEntry | undefined): boolean 
 
 const namedPaths = (paths: readonly string[]): string => (paths.length > MAX_NAMED_PATHS ? `${paths.slice(0, MAX_NAMED_PATHS).join(', ')} and ${paths.length - MAX_NAMED_PATHS} more` : paths.join(', '));
 
+// One key per RunWorkspace method, so a method added to the port cannot go undeclared; `handoff` is the D-02 name for `fetchIntoSource`, the one write to the
+// source (a new local branch) that a step requirement names.
+const RUN_WORKSPACE_CAPABILITIES: Record<Exclude<keyof RunWorkspace, 'descriptor'>, true> & { handoff: true } = {
+  prepare: true,
+  prepareValidationClone: true,
+  head: true,
+  headTrailers: true,
+  statusAll: true,
+  listFiles: true,
+  describe: true,
+  status: true,
+  snapshot: true,
+  changedSince: true,
+  discard: true,
+  park: true,
+  unpark: true,
+  dropPark: true,
+  commit: true,
+  fetchIntoSource: true,
+  restorePaths: true,
+  removeUntracked: true,
+  patch: true,
+  diffCommits: true,
+  readText: true,
+  ensureDir: true,
+  handoff: true,
+};
+
 export class CloneRunWorkspace implements RunWorkspace {
+  readonly descriptor: CapabilityDescriptor = { port: 'run-workspace', adapter: 'clone', version: '1.0.0', capabilities: { ...RUN_WORKSPACE_CAPABILITIES }, attributes: { strategy: 'clone' }, offline: true };
+
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo> {
     const target = resolveRunTarget(input);
     if (!target.ok) return target;
@@ -627,6 +658,32 @@ export class CloneRunWorkspace implements RunWorkspace {
       }
     }
     return ok(found);
+  }
+
+  patch(path: string, options: { exclude: readonly string[]; excludePaths?: readonly string[] }): Result<string> {
+    // An excluded directory is a plain relative path: no glob, no magic, no `..`, so it can name only a place inside the clone.
+    for (const dir of options.exclude) {
+      if (!/^[A-Za-z0-9._][A-Za-z0-9._/-]*$/.test(dir) || dir.split('/').includes('..')) return invalid('exclude', `${JSON.stringify(dir)} is not a plain relative directory`);
+    }
+    // An excluded file is any name git can hold, so it is not held to the directory pattern. It reaches git as one argv word after `--` behind the `literal`
+    // pathspec magic, which makes `*`, `?`, `[`, `:` and a leading `-` plain characters; what is refused is only what could name a place outside the clone.
+    const excludePaths = options.excludePaths ?? [];
+    for (const file of excludePaths) {
+      if (typeof file !== 'string' || file === '' || file.startsWith('/') || file.includes('\0') || file.split('/').includes('..')) {
+        return invalid('excludePaths', `${JSON.stringify(file)} is not a relative file path inside the clone`);
+      }
+    }
+    const tree = this.treeOfWorkingContent(path);
+    if (!tree.ok) return tree;
+    const diff = runGit(
+      [
+        'diff', '--binary', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', 'HEAD', tree.value, '--', '.',
+        ...options.exclude.map((dir) => `:(exclude)${dir}`),
+        ...excludePaths.map((file) => `:(exclude,literal)${file}`),
+      ],
+      { cwd: path, neutralizeFilters: true, timeoutMs: TREE_TIMEOUT_MS },
+    );
+    return diff.ok ? ok(diff.value.stdout) : failure(diff.error);
   }
 
   diffCommits(path: string, from: string, to: string): Result<PathChange[]> {

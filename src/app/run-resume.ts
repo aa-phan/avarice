@@ -4,6 +4,12 @@
 //   1. reap       every `launch:*` step left `started` is a host that may still be running (it is detached, in its own process group, and outlives a
 //                 killed supervisor): it is ended by the session ID its step recorded. Every reap completes before any row is marked or anything is
 //                 read from the clone, and a reap that fails stops the resume with every row still `started` (T-02-56, FR-7); so does a started launch that cannot be reaped at all (no recorded session ID, or a host with no reap).
+//   1b. no replay a privileged action that has an `action.started` and no end is never run again (FR-15): a permission decision names it and the run
+//                 stops `blocked_on_decision` before anything below runs; a run with none goes on as before.
+//   1c. references every reference the run recorded (the brief file, the items of its context packs) is refreshed before anything continues (FR-8, S-5): a
+//                 changed one stops the run `blocked_on_decision` with reason ref_changed, a deleted one ref_deleted, a revoked one access_revoked (in that
+//                 order of precedence), with one decision that names them and no unit launched; a stale one is shown and the run goes on, and one that cannot
+//                 be judged goes on with a warning.
 //   2. reconcile  by the run's state: a `running` run whose item was in flight is put back to its attempt's snapshot and retried once (CON-16) or, when
 //                 the supervisor's own commit was made, the commit is recognised by its `Avarice-Attempt` trailer (T-02-57); an in-flight attempt that was a
 //                 resume of an answered item's session (plan 03-22) is put back to its snapshot (which takes the unparked delta out) and goes to the fresh
@@ -14,18 +20,26 @@
 //
 // Nothing is claimed that was not measured: an interrupted invocation is `inconclusive` (the conservative reading of the recovery table), and the
 // budgets it was charged stay charged (the next reservation turns the orphaned one into spent invocations; nothing is refunded, CON-13).
+import { INTERRUPTED_REF_PREFIX, reconcilePrivilegedSteps } from './authorize.ts';
 import { chargeRunOrphans } from './budget.ts';
 import { cloneRevision, cachedVerdicts, checksToRun } from './checks.ts';
+import { ISSUE_MAX_CHARS, OPTION_LABEL_MAX_CHARS } from '../domain/decision-policy.ts';
+import { storedText } from '../domain/quick-record.ts';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import { isRunResumable, isRunStopState } from '../domain/run-lifecycle.ts';
 import type { RunRow, RunStepRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
+import { hostOfRun } from './run-host.ts';
 import { getRunStatuses } from './run-status.ts';
 import { reconcileItem } from './run-stages/item.ts';
 import { isBlockedRunContinuable } from './run-stages/schedule.ts';
+import { stateDigestOf } from './run-stages/blocked.ts';
 import type { RunStageContext } from './run-stages/stage.ts';
+import { queueDecisionNotice } from './notify.ts';
+import { refEvidence, refreshRunRefs } from './resume-refs.ts';
+import type { RefBlock } from './resume-refs.ts';
 
 const LAUNCH_PREFIX = 'launch:';
 // The run step that records why a resume could not go on (read by `avarice resume --wait` to tell a failed resume from a killed supervisor).
@@ -84,14 +98,18 @@ export async function reapRunLaunches(ctx: RunStageContext): Promise<Result<void
   if (!steps.ok) return steps;
   const started = steps.value.filter((s) => s.step.startsWith(LAUNCH_PREFIX) && s.status === 'started');
   if (started.length === 0) return ok(undefined);
+  // The host that launched it: a restricted run's host is the restricted one (plan 04-23), whichever process continues the run.
+  const hostOf = hostOfRun(deps, runId);
+  if (!hostOf.ok) return hostOf;
+  const host = hostOf.value;
 
   for (const launch of started) {
     const body = isObject(launch.result) ? launch.result : {};
     const sessionId = body['sessionId'];
     // A launch that cannot be reaped stops the resume like a reap that fails: its host may still be running, and nothing may read the clone beside it.
-    if (deps.host.reap === undefined) return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: the host has no reap` });
+    if (host?.reap === undefined) return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: the host has no reap` });
     if (typeof sessionId !== 'string' || sessionId === '') return err({ kind: 'internal', cause: `the launch step ${launch.step} (attempt ${launch.attempt}) cannot be reaped: it recorded no session ID` });
-    const reaped = await deps.host.reap({ sessionId });
+    const reaped = await host.reap({ sessionId });
     if (!reaped.ok) return reaped;
     if (reaped.value.terminated === 0) continue;
     const invocationId = body['invocationId'];
@@ -290,12 +308,125 @@ function reconcileRunning(ctx: RunStageContext, run: RunRow): Result<void> {
   return resumed.ok ? ok(undefined) : resumed;
 }
 
+// A privileged action whose start was recorded and whose end was not may have taken effect, so a resume never goes on past it (FR-15, T-04-44): each one
+// has a permission decision that names it (reconcilePrivilegedSteps opens it, once), and the run stops with them. The block carries the reason
+// `enforcement_failure`, which the supervisor never continues on its own: an answer to a decision that only offers `withdraw` cannot make it continue, and no
+// item runs beside an open decision about an action nobody can vouch for. Nothing is called and no approval is made here. Returns true when the run stopped.
+function blockOnInterruptedActions(ctx: RunStageContext): Result<boolean> {
+  const { deps, runId } = ctx;
+  const privileged = reconcilePrivilegedSteps(deps, runId);
+  if (!privileged.ok) return privileged;
+  // The decisions of an earlier resume that was killed before it blocked the run still stop it: they are found by what they refer to, not by this call.
+  const open = deps.ledger.listDecisions({ runId, state: 'open' });
+  if (!open.ok) return open;
+  const interrupted = open.value.filter((d) => d.class === 'permission' && d.evidenceRefs.some((ref) => ref.startsWith(INTERRUPTED_REF_PREFIX)));
+  if (interrupted.length === 0) return ok(false);
+  const current = deps.ledger.getRun(runId);
+  if (!current.ok) return current;
+  let row = current.value;
+  if (row.state === 'blocked_on_decision' && row.reason === 'enforcement_failure') return ok(true);
+  // A run blocked on an answered item decision is going to be continued by this resume (the supervisor continues a block with reason `decision`); a blocked
+  // run cannot move to blocked_on_decision again, so it is paused and blocked again with the reason of the interrupted action, as blockOnChangedRefs does.
+  if (row.state === 'blocked_on_decision') {
+    const paused = ctx.transition(row, 'paused', 'reconcile', { data: { reason: 'interrupted action' } });
+    if (!paused.ok) return paused;
+    row = paused.value;
+  }
+  const decisionIds = interrupted.map((d) => d.decisionId);
+  ctx.note(`a privileged action started and never finished; it was not repeated (decision ${decisionIds.join(', ')})`);
+  const blocked = ctx.transition(row, 'blocked_on_decision', 'none', {
+    reason: 'enforcement_failure',
+    data: { interruptedActions: interrupted.length, decisionIds, class: 'permission' },
+  });
+  if (!blocked.ok) return blocked;
+  return ok(true);
+}
+
+// What the owner is told when a reference stops the run: the reason in words, and the references (at most MAX_REF_LINES, then a count).
+const MAX_REF_LINES = 20;
+const REF_BLOCK_TEXT: Readonly<Record<RefBlock['reason'], string>> = {
+  ref_changed: 'changed since the run recorded it',
+  ref_deleted: 'is gone',
+  access_revoked: 'can no longer be read',
+};
+
+// A reference the run was built from changed, was deleted or can no longer be read, so the run does not go on to plan or delegate on it (FR-8, S-5, T-04-54). One
+// decision names the references that stopped it (found again by its evidence references when a resume was killed after opening it, so none is opened twice), and
+// the run moves to blocked_on_decision with the most severe reason. The decision offers `withdraw` only: nothing the owner types can accept a changed reference,
+// and the work items stay as they were, so nothing is lost when a later change of this rule lets the run go on. Returns true when the run stopped.
+async function blockOnChangedRefs(ctx: RunStageContext): Promise<Result<boolean>> {
+  const { deps, runId } = ctx;
+  const refreshed = await refreshRunRefs(deps, runId);
+  if (!refreshed.ok) return refreshed;
+  for (const warning of refreshed.value.warnings) ctx.note(warning);
+  const { block } = refreshed.value;
+  if (block === undefined) return ok(false);
+
+  const stored = deps.ledger.getRunContract(runId);
+  if (!stored.ok) return stored;
+  if (stored.value === null) return err({ kind: 'internal', cause: `run ${runId} has no stored contract` });
+  const shown = block.refs.slice(0, MAX_REF_LINES);
+  const evidenceRefs = shown.map(refEvidence);
+  const open = deps.ledger.listDecisions({ runId, state: 'open' });
+  if (!open.ok) return open;
+  let decisionId = open.value.find((d) => d.evidenceRefs.length === evidenceRefs.length && evidenceRefs.every((ref) => d.evidenceRefs.includes(ref)))?.decisionId;
+  if (decisionId === undefined) {
+    const lines = shown.map((ref) => `${ref.provider} ${ref.kind} ${ref.id} (${ref.freshness})`).join('; ');
+    const more = block.refs.length > shown.length ? `; and ${block.refs.length - shown.length} more` : '';
+    const label = storedText('withdraw', OPTION_LABEL_MAX_CHARS);
+    const opened = deps.ledger.openDecision({
+      runId,
+      contractVersion: stored.value.version,
+      class: block.reason === 'access_revoked' ? 'permission' : 'acceptance',
+      issue: storedText(`the run was built from ${block.refs.length} reference(s) that ${REF_BLOCK_TEXT[block.reason]}: ${lines}${more}. It was not continued.`, ISSUE_MAX_CHARS),
+      options: [{ key: 'withdraw', label, kind: 'withdraw' }],
+      consequences: { withdraw: 'the decision closes with nothing applied; the run does not continue on the changed reference, and `avarice cancel` ends it' },
+      evidenceRefs,
+      affectedItems: [],
+      stateDigest: stateDigestOf(stored.value.version, stored.value.body as RunContract),
+      urgency: 'blocking',
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!opened.ok) return opened;
+    decisionId = opened.value.decisionId;
+    // The banner is batched (D-24): a notice that cannot be queued is said and never stops the run; the inbox still shows the decision.
+    const queued = queueDecisionNotice(deps, runId, decisionId);
+    if (!queued.ok) ctx.note(`no notice queued for decision ${decisionId}: ${queued.error.kind}`);
+  }
+
+  const current = deps.ledger.getRun(runId);
+  if (!current.ok) return current;
+  let row = current.value;
+  if (row.state === 'blocked_on_decision' && row.reason === block.reason) return ok(true);
+  // A run blocked on an answered item decision is going to be continued by this resume; a blocked run cannot move to blocked_on_decision again, so it is
+  // paused and blocked again with the reason of the reference.
+  if (row.state === 'blocked_on_decision') {
+    const paused = ctx.transition(row, 'paused', 'reconcile', { data: { reason: 'references changed' } });
+    if (!paused.ok) return paused;
+    row = paused.value;
+  }
+  ctx.note(`a reference the run was built from ${REF_BLOCK_TEXT[block.reason]}; the run was not continued (decision ${decisionId})`);
+  const blocked = ctx.transition(row, 'blocked_on_decision', 'none', {
+    reason: block.reason,
+    data: { references: block.refs.length, decisionId, class: block.reason === 'access_revoked' ? 'permission' : 'acceptance' },
+  });
+  return blocked.ok ? ok(true) : blocked;
+}
+
 async function reconcile(ctx: RunStageContext): Promise<Result<void>> {
   const reaped = await reapRunLaunches(ctx);
   if (!reaped.ok) return reaped;
   // Every host of this run is gone and nothing holds a reservation but a dead supervisor: its invocations are spent (CON-13), whatever the run does next.
   const charged = chargeRunOrphans(ctx.deps, ctx.runId);
   if (!charged.ok) return charged;
+  // Before anything is reconciled or continued: a privileged action in flight is never replayed (FR-15).
+  const stopped = blockOnInterruptedActions(ctx);
+  if (!stopped.ok) return stopped;
+  if (stopped.value) return ok(undefined);
+  // Then the references the run was built from: nothing is reconciled or delegated on text that changed since (FR-8, S-5).
+  const refsStopped = await blockOnChangedRefs(ctx);
+  if (!refsStopped.ok) return refsStopped;
+  if (refsStopped.value) return ok(undefined);
 
   const current = ctx.deps.ledger.getRun(ctx.runId);
   if (!current.ok) return current;

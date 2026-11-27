@@ -557,14 +557,76 @@ describe('subagents, web, meta and unknown tools', () => {
   });
 });
 
+describe('a file read under a run retrieval policy charges the whole-file rows (WR-11, CON-10, CON-11)', () => {
+  const retrieval = { searches: 400, broadDiscovery: false };
+
+  it('returns toolCalls as the budget and the two whole-file rows as alsoCharges, in that order', () => {
+    const d = decide(read(`${STAGING}/src/a.ts`), policy({ purpose: 'run', retrieval }));
+    assert.equal(d.decision, 'allow');
+    assert.equal(d.budget, 'toolCalls');
+    assert.deepEqual(d.alsoCharges, ['retrieval.fullReads', 'retrieval.fullReadBytes']);
+  });
+
+  it('keeps an offset and a limit that are positive whole numbers on the normalized Read and drops any other value', () => {
+    const readCall = (extra: Record<string, unknown>) => normalizeToolCall('Read', { file_path: '/r', ...extra }, STAGING);
+    assert.deepEqual(readCall({ offset: 11, limit: 5 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], offset: 11, limit: 5 } });
+    assert.deepEqual(readCall({ offset: 3 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], offset: 3 } });
+    assert.deepEqual(readCall({ limit: 1 }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'], limit: 1 } });
+    for (const bad of [0, -1, 1.5, '5', null, NaN, Infinity, 2 ** 60]) {
+      assert.deepEqual(readCall({ offset: bad, limit: bad }), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } }, String(bad));
+    }
+  });
+
+  it('charges no further row when the policy has no retrieval block', () => {
+    const d = decide(read(`${STAGING}/src/a.ts`), policy({ purpose: 'run' }));
+    assert.equal(d.decision, 'allow');
+    assert.equal(d.alsoCharges, undefined);
+  });
+});
+
+describe('the broad-discovery refusal reason names a brace group when one is the cause (GIN-03, CON-10)', () => {
+  const run = policy({ purpose: 'run', retrieval: { searches: 400, broadDiscovery: false } });
+  const search = (extra: Record<string, unknown>) => {
+    const n = normalizeToolCall('Grep', { pattern: 'x', ...extra }, STAGING);
+    assert.equal(n.ok, true);
+    return n.ok ? decide(n.call, run) : decide({ kind: 'other', tool: 'x' }, run);
+  };
+
+  it('refuses a brace-group glob with a reason that differs from the no-filter reason', () => {
+    const brace = search({ glob: '*.{ts,tsx}' });
+    const none = search({});
+    assert.equal(brace.rule, 'retrieval:broad-discovery-not-authorized');
+    assert.equal(none.rule, 'retrieval:broad-discovery-not-authorized');
+    assert.match(brace.reason ?? '', /brace group/);
+    assert.match(brace.reason ?? '', /type filter/);
+    assert.notEqual(brace.reason, none.reason);
+    assert.doesNotMatch(none.reason ?? '', /brace group/);
+  });
+});
+
 describe('normalizeToolCall and parseHookPolicy', () => {
   it('maps Claude tool names to normalized calls and resolves relative paths against cwd', () => {
     assert.deepEqual(normalizeToolCall('Write', { file_path: '/a/b' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'Write', paths: ['/a/b'] } });
     assert.deepEqual(normalizeToolCall('Edit', { file_path: 'x/y.md' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'Edit', paths: [`${STAGING}/x/y.md`] } });
     assert.deepEqual(normalizeToolCall('NotebookEdit', { notebook_path: '/n.ipynb' }, STAGING), { ok: true, call: { kind: 'file-write', tool: 'NotebookEdit', paths: ['/n.ipynb'] } });
     assert.deepEqual(normalizeToolCall('Read', { file_path: '/r' }, STAGING), { ok: true, call: { kind: 'file-read', tool: 'Read', paths: ['/r'] } });
-    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } });
     assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.ts', path: 'src' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: `${STAGING}/src` } });
+    for (const glob of ['*', '**', '**/*', '*.*', './**/*']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true } }, `Grep glob ${glob} matches every file`);
+    }
+    // GIN-03: a glob holding a brace group is judged unfiltered and the call records why.
+    for (const glob of ['{*,.*}', 'src/{a,b}', '*.{ts,tsx}']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING, unfiltered: true, braceGlob: true } }, `Grep glob ${glob} holds a brace group`);
+    }
+    for (const glob of ['*.ts', 'src/**/*.ts']) {
+      assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', glob }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } }, `Grep glob ${glob} filters`);
+    }
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', type: 'ts' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
+    assert.deepEqual(normalizeToolCall('Glob', { pattern: '{*,.*}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true, braceGlob: true } });
+    assert.deepEqual(normalizeToolCall('Glob', { pattern: '**/*.{ts,tsx}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Glob', path: STAGING, unfiltered: true, braceGlob: true } });
+    // A brace group in a Grep's glob does not make a typed Grep unfiltered.
+    assert.deepEqual(normalizeToolCall('Grep', { pattern: 'x', type: 'ts', glob: '*.{ts,tsx}' }, STAGING), { ok: true, call: { kind: 'search', tool: 'Grep', path: STAGING } });
     assert.deepEqual(normalizeToolCall('Bash', { command: 'ls', run_in_background: true }, STAGING), { ok: true, call: { kind: 'shell', command: 'ls', background: true, cwd: STAGING } });
     assert.deepEqual(normalizeToolCall('Agent', { subagent_type: 'a' }, STAGING), { ok: true, call: { kind: 'subagent', subagentType: 'a' } });
     assert.deepEqual(normalizeToolCall('Task', {}, STAGING), { ok: true, call: { kind: 'subagent', subagentType: null } });
@@ -755,7 +817,8 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
 
   it('denies a chained, substituted or redirected contract command with shell-syntax', () => {
     denied('npm test; curl x', 'shell-syntax');
-    denied('npm test && git push', 'shell-syntax');
+    // Plan 04-19: a push inside a chain is named for what it is (FR-12) before the chain is refused for its syntax.
+    denied('npm test && git push', 'privileged:git.push');
     denied('npm test > out.txt', 'shell-syntax');
     denied('npm test $(curl x)', 'shell-syntax');
   });
@@ -776,7 +839,7 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
   it('keeps git commit, git push, git config, git -c, avarice, claude, curl and make denied for the run purpose', () => {
     denied('git commit -m x', 'shell-denied-prefix');
     denied('git -c user.name=x commit -m x', 'shell-denied-prefix');
-    denied('git push origin HEAD', 'shell-denied-prefix');
+    denied('git push origin HEAD', 'privileged:git.push'); // plan 04-19: named as the privileged action; it is still refused
     denied('git config user.name x', 'shell-denied-prefix');
     denied('avarice status', 'shell-denied-prefix');
     denied('claude -p x', 'shell-denied-prefix');
@@ -796,7 +859,7 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     denied('git commit -m x', 'shell-denied-prefix', hostile);
     denied('avarice status', 'shell-denied-prefix', hostile);
     denied('curl x', 'shell-denied-prefix', hostile);
-    denied('/usr/bin/git push', 'shell-not-allowed', hostile);
+    denied('/usr/bin/git push', 'privileged:git.push', hostile); // plan 04-19: named as the privileged action; it is still refused
   });
 
   it('keeps a Phase 1 read-only command working beside the contract commands', () => {
@@ -882,7 +945,8 @@ describe('the run purpose: agent commands, prompts and background shells (RC-4, 
     });
 
     it('keeps the git shapes of quick.md denied by design: commit, add, push, checkout -b, fetch and worktree', () => {
-      for (const command of ['git commit -m x', 'git push origin HEAD']) denied(command, 'shell-denied-prefix');
+      denied('git commit -m x', 'shell-denied-prefix');
+      denied('git push origin HEAD', 'privileged:git.push'); // plan 04-19
       for (const command of ['git add src/slug.ts', 'git checkout -b quick/x', 'git fetch origin main', 'git worktree add ../x']) denied(command, 'shell-not-allowed');
     });
   });

@@ -1,6 +1,7 @@
 // The ordered registry of index steps for `planning_ready` (docs/repository-onboarding.md "Stages", Index row).
 // The stage loop (index-stage.ts) and activation (activate.ts) know only this registry and the shape of a step's
 // result, so plans 01-17 (intel) and 01-18 (knowledge pass) fill in their step without editing either.
+import { parseKnowledgePass } from '../../domain/context-adapters.ts';
 import { ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import type { IndexName, IndexStepResult } from '../../domain/project-record.ts';
@@ -35,6 +36,19 @@ export const INDEX_STEPS: readonly IndexStep[] = [
   { name: 'intel', run: runIntelStep },
   { name: 'knowledge', run: runKnowledgeStep },
 ];
+
+// Whether the profile runs the knowledge pass (plan 04-31; D-08): `adapters.knowledgePass` in the profile config, true when absent. Composition has already refused a value that is
+// not a boolean, so a value that cannot be read here (a config edited since) leaves the pass on, the documented default.
+export function knowledgePassEnabled(deps: Pick<AppDeps, 'profile'>): boolean {
+  const parsed = parseKnowledgePass(deps.profile.config.sections.adapters);
+  return parsed.ok ? parsed.value : true;
+}
+
+// A step the profile switched off (`knowledgePass` false): the record says disabled and no invocation starts. Only the knowledge step has a profile switch.
+export function profileDisabledStep(deps: Pick<AppDeps, 'profile'>, step: IndexStep): IndexStepResult | undefined {
+  if (step.name === 'knowledge' && !knowledgePassEnabled(deps)) return { index: 'knowledge', status: 'disabled' };
+  return undefined;
+}
 
 // The name of a step in `onboarding_steps` and of the checkpoint taken before it.
 export function indexStepKey(name: IndexName): string {

@@ -1,0 +1,763 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-evaluation",
+  "generatedAt": "2026-11-20T02:31:07.591Z",
+  "tasksFile": {
+    "path": "/Users/aphan/avarice/.claude/worktrees/phase-04/test/benchmark/phase4/eval-tasks.json",
+    "sha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z"
+  },
+  "claudeVersion": "2.1.326 (Claude Code)",
+  "caps": {
+    "runUsd": 0.4,
+    "onboardUsd": {
+      "A": 0.6,
+      "B": 0.6,
+      "C": 1.1
+    },
+    "mapUsd": 0.6
+  },
+  "projection": {
+    "runs": 18,
+    "runUsd": 7.200000000000002,
+    "onboardUsd": 13.799999999999995,
+    "mapUsd": 3.6,
+    "mapParents": 6,
+    "totalUsd": 24.599999999999998
+  },
+  "taskIds": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06"
+  ],
+  "invocations": [
+    {
+      "generatedAt": "2026-11-20T02:31:07.592Z",
+      "taskIds": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06"
+      ],
+      "arms": [
+        "A",
+        "B",
+        "C"
+      ],
+      "runs": 18,
+      "runCapUsd": 0.4,
+      "onboardCapUsd": {
+        "A": 0.6,
+        "B": 0.6,
+        "C": 1.1
+      },
+      "projection": {
+        "runs": 18,
+        "runUsd": 7.200000000000002,
+        "onboardUsd": 13.799999999999995,
+        "mapUsd": 3.6,
+        "mapParents": 6,
+        "totalUsd": 24.599999999999998
+      }
+    }
+  ],
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "A",
+      "success": true,
+      "tokens": 2486811,
+      "costUsd": 0.11429980500000005,
+      "runId": "run_01M7VDA8YK7NBWHGEEATTCAKTE",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.17443567,
+        "tokens": 4816998,
+        "mapCostUsd": 0.09483314
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T01",
+      "arm": "B",
+      "success": true,
+      "tokens": 3129909,
+      "costUsd": 0.11852715999999999,
+      "runId": "run_01M7VE1FD4W0XB8JVCV66Z00GK",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.083021395,
+        "tokens": 2065738,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T01",
+      "arm": "C",
+      "success": false,
+      "tokens": 3611629,
+      "costUsd": 0.20840664499999995,
+      "runId": "run_01M7VF2NEQR32EVVVA716Q7W7Z",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.601340935,
+        "tokens": 5241936,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T02",
+      "arm": "A",
+      "success": false,
+      "tokens": 2561571,
+      "costUsd": 0.16810566000000002,
+      "runId": "run_01M7VG4J8QV3RM7CKH9Y6YRC72",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.195032235,
+        "tokens": 4095636,
+        "mapCostUsd": 0.06309529
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T02",
+      "arm": "B",
+      "success": false,
+      "tokens": 3040412,
+      "costUsd": 0.21330127499999993,
+      "runId": "run_01M7VH1JBT0D96N6RVXRNW1YMW",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.2618651,
+        "tokens": 3232690,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T02",
+      "arm": "C",
+      "success": true,
+      "tokens": 2372642,
+      "costUsd": 0.12280415499999998,
+      "runId": "run_01M7VJ2EJ69B1J96XSJKX39RB5",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 1.1,
+        "tokens": 5020575,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T03",
+      "arm": "A",
+      "success": false,
+      "tokens": 4746460,
+      "costUsd": 0.281385585,
+      "runId": "run_01M7VK4GDDSHDBGWDRC1FYZJ4M",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.259634625,
+        "tokens": 4437902,
+        "mapCostUsd": 0.193580415
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T03",
+      "arm": "B",
+      "success": true,
+      "tokens": 2877492,
+      "costUsd": 0.144032435,
+      "runId": "run_01M7VM4EN2GZWXCXFV8MTDP93S",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.130872625,
+        "tokens": 2750722,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T03",
+      "arm": "C",
+      "success": true,
+      "tokens": 3210746,
+      "costUsd": 0.11305621,
+      "runId": "run_01M7VN7EHDYWBRV9Q9G5KDH2WE",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.7484204149999998,
+        "tokens": 7289619,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T04",
+      "arm": "A",
+      "success": false,
+      "tokens": 3324764,
+      "costUsd": 0.19664181500000003,
+      "runId": "run_01M7VP8WFJDTKMH12WWZR0E0RQ",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.1529234,
+        "tokens": 3488204,
+        "mapCostUsd": 0.08449173
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T04",
+      "arm": "B",
+      "success": true,
+      "tokens": 3399716,
+      "costUsd": 0.126188515,
+      "runId": "run_01M7VQ0J28NAJCGJVAP1W0NE8G",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.07974027000000002,
+        "tokens": 2217146,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T04",
+      "arm": "C",
+      "success": true,
+      "tokens": 2382964,
+      "costUsd": 0.15742621999999995,
+      "runId": "run_01M7VR7YZ4QR908ENT6WPN0JG8",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 1.1,
+        "tokens": 7226614,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T05",
+      "arm": "A",
+      "success": true,
+      "tokens": 3993902,
+      "costUsd": 0.18241809000000003,
+      "runId": "run_01M7VS76KK7S2AGASBZ4W1JX5M",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.16034396000000004,
+        "tokens": 3938029,
+        "mapCostUsd": 0.08325354500000001
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T05",
+      "arm": "B",
+      "success": true,
+      "tokens": 3669406,
+      "costUsd": 0.12915386499999998,
+      "runId": "run_01M7VT3WMHS745W7MFM840GH96",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.09147263,
+        "tokens": 2692527,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    },
+    {
+      "task": "T05",
+      "arm": "C",
+      "success": false,
+      "tokens": 3434768,
+      "costUsd": 0.15423142999999992,
+      "runId": "run_01M7VV9EKPZKWFNN70YVFVH6N1",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.70656445,
+        "tokens": 5501479,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T06",
+      "arm": "A",
+      "success": false,
+      "tokens": 2720412,
+      "costUsd": 0.11635724500000003,
+      "runId": "run_01M7VWCZ32K31TPE52ZSQ6M24R",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.200320955,
+        "tokens": 4233910,
+        "mapCostUsd": 0.07343701999999999
+      },
+      "judge": {
+        "success": false,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "failed",
+            "exitCode": 1
+          }
+        ],
+        "heldOut": {
+          "status": "failed",
+          "exitCode": 1
+        }
+      }
+    },
+    {
+      "task": "T06",
+      "arm": "B",
+      "success": false,
+      "tokens": 2598959,
+      "costUsd": 0.10300309500000002,
+      "runId": "run_01M7VX2SMNSNAGT8S35WH18F7V",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.057269705000000004,
+        "tokens": 1220861,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": false,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "failed",
+            "exitCode": 1
+          }
+        ],
+        "heldOut": {
+          "status": "failed",
+          "exitCode": 1
+        }
+      }
+    },
+    {
+      "task": "T06",
+      "arm": "C",
+      "success": true,
+      "tokens": 2545102,
+      "costUsd": 0.11036829500000005,
+      "runId": "run_01M7VY172ZDKZJGMZJ1RV67PJ4",
+      "state": "ready_for_review",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.7192036700000001,
+        "tokens": 7074914,
+        "mapCostUsd": 0
+      },
+      "judge": {
+        "success": true,
+        "checks": [
+          {
+            "name": "typecheck",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "lint",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "format:check",
+            "status": "passed",
+            "exitCode": 0
+          },
+          {
+            "name": "test",
+            "status": "passed",
+            "exitCode": 0
+          }
+        ],
+        "heldOut": {
+          "status": "passed",
+          "exitCode": 0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "arms": {
+      "A": {
+        "runs": 6,
+        "success": 2,
+        "tokens": 19833920,
+        "costUsd": 1.059208,
+        "judgeErrors": 0
+      },
+      "B": {
+        "runs": 6,
+        "success": 4,
+        "tokens": 18715894,
+        "costUsd": 0.834206,
+        "judgeErrors": 0
+      },
+      "C": {
+        "runs": 6,
+        "success": 4,
+        "tokens": 17557851,
+        "costUsd": 0.866293,
+        "judgeErrors": 0
+      }
+    },
+    "ac8": {
+      "pass": false,
+      "via": null,
+      "reason": "no pack arm both matches the success of A and stays within half of its tokens",
+      "arms": {
+        "B": {
+          "successOk": true,
+          "tokensOk": false,
+          "tokenShare": 0.9436306085735952
+        },
+        "C": {
+          "successOk": true,
+          "tokensOk": false,
+          "tokenShare": 0.8852436129620368
+        }
+      }
+    },
+    "knowledge": {
+      "outcome": "on",
+      "reason": "arm C does not cost more tokens than B"
+    }
+  },
+  "verdict": {
+    "pass": false,
+    "via": null,
+    "reason": "no pack arm both matches the success of A and stays within half of its tokens",
+    "arms": {
+      "B": {
+        "successOk": true,
+        "tokensOk": false,
+        "tokenShare": 0.9436306085735952
+      },
+      "C": {
+        "successOk": true,
+        "tokensOk": false,
+        "tokenShare": 0.8852436129620368
+      }
+    }
+  },
+  "knowledgeRule": {
+    "outcome": "on",
+    "reason": "arm C does not cost more tokens than B"
+  }
+}

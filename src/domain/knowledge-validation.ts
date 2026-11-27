@@ -55,12 +55,10 @@ function textBytes(node: Record<string, unknown>): number {
   return total;
 }
 
-// Paths the corpus never holds in Phase 1 (S-45): a node cannot come from them whatever the manifest says.
-const forbiddenSource = (path: string): boolean => path.startsWith('.planning/phases/') || path === '.planning/STATE.md';
-
-// What no node may cite, whatever its origin: STATE.md and the planning documents under .planning/phases/. A tracked script or data file
-// there is code the code graph may legitimately name (the real target keeps contrast-check.mjs in a phase directory, found by the live
-// exit rehearsal, plan 01-19), so for a node the pass did not add only a document is refused.
+// What a node the pass did not add may not cite: STATE.md and the planning documents under .planning/phases/. Since plan 04-17 those are documents of the
+// corpus (KNOWLEDGE_PLANNING_GLOBS), so a node of the pass may cite them when the manifest holds them (checked below, like every other source); the
+// code graph, which is code only, still may not. A tracked script or data file there is code the code graph may legitimately name (the real target
+// keeps contrast-check.mjs in a phase directory, found by the live exit rehearsal, plan 01-19), so for such a node only a document is refused.
 const PHASE_DOCUMENT = /\.(?:md|mdx|markdown|txt|rst|adoc)$/i;
 const forbiddenForAnyNode = (path: string): boolean => path === '.planning/STATE.md' || (path.startsWith('.planning/phases/') && PHASE_DOCUMENT.test(path));
 
@@ -100,8 +98,8 @@ export function validateKnowledgeGraph(merged: unknown, manifest: KnowledgeManif
     const id = typeof node['id'] === 'string' ? node['id'] : `#${index}`;
     const source = node['source_file'];
     const fromPass = node['_avarice_origin'] === KNOWLEDGE_ORIGIN;
-    if (typeof source === 'string' && (fromPass ? forbiddenSource(source) : forbiddenForAnyNode(source))) {
-      problems.push(`node ${id}: sourced from ${source}, which the corpus never holds (.planning/phases and STATE.md are excluded)`);
+    if (typeof source === 'string' && !fromPass && forbiddenForAnyNode(source)) {
+      problems.push(`node ${id}: sourced from ${source}, a planning document the code graph does not hold (.planning/phases and STATE.md are documents of the corpus)`);
     }
     if (node['_avarice_origin'] !== KNOWLEDGE_ORIGIN) return;
     if (node['file_type'] === 'document') documentIds.add(id);

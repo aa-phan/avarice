@@ -58,7 +58,8 @@ export function parseArgs(argv: readonly string[], options: ParseOptions = {}): 
   return { positionals, flags, repeated };
 }
 
-const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9]*)=(.+)$/;
+// A name may hold dots: the retrieval caps of a run are `retrieval.searches`, `retrieval.fullReads` and `retrieval.fullReadBytes`.
+const BUDGET_FLAG = /^([A-Za-z][A-Za-z0-9.]*)=(.+)$/;
 
 // Repeatable `--budget name=value`, shared by `onboard` and `start`. The names and the lower-only rule belong to the contract
 // compilers (RC-5); this only checks the shape, so a typo creates nothing. Returns the overrides or a message for the usage line.
@@ -91,12 +92,17 @@ export interface CommandExtras {
 // What a file under src/cli/commands/ exports. `readOnly` makes composition open the store read-only.
 export interface CommandModule<Deps> {
   run(args: ParsedArgs, deps: Deps, io: Io, extras?: CommandExtras): Promise<number> | number;
-  readOnly?: boolean;
+  // A command with one form that reads and another that writes (`context <term>` and `context add`) gives a function of its arguments instead.
+  readOnly?: boolean | ((args: ParsedArgs) => boolean);
   // Composition also locates GSD and builds its adapter (a read-only command that reads the indexes through GSD).
-  needsGsd?: boolean;
+  needsGsd?: boolean | ((args: ParsedArgs) => boolean);
   booleanFlags?: readonly string[];
   // Checked before the profile is resolved, so a usage error leaves nothing on disk. Returns the error text.
   // `env` is the environment the command runs in: the process environment, or the one a test passes to main().
   // `context` tells a command that must not run inside a run where it runs: terminal facts and the process ancestry reader.
   usage?(args: ParsedArgs, env?: NodeJS.ProcessEnv, context?: IdentityContext): string | undefined;
+  // The path of the repository the command names (`repo add`, `onboard`), so main() can find the profile that repository is bound to
+  // before any store is opened (D-16). A command that names none returns undefined and is judged by the repository its working
+  // directory is inside, if any. Called only after usage() accepted the arguments.
+  repository?(args: ParsedArgs): string | undefined;
 }

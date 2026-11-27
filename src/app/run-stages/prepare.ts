@@ -7,7 +7,7 @@
 // must report `enforced`, else the run blocks with `enforcement_failure` before any invocation; otherwise it moves to `running`.
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
-import { checkG0Static } from '../../domain/run-contract.ts';
+import { checkG0Static, runModeOf } from '../../domain/run-contract.ts';
 import type { G0Failure, RunContract } from '../../domain/run-contract.ts';
 import { RUN_NEXT_ACTIONS } from '../../domain/run-lifecycle.ts';
 import { canonicalJson, digestOf } from '../../domain/digest.ts';
@@ -17,9 +17,11 @@ import type { AttemptRow, RunRow } from '../../ports/ledger.ts';
 import { blockingOf, validateChecks } from '../check-validation.ts';
 import { installDependencies, measureInventory, runRequiredChecks } from '../checks.ts';
 import type { InstallResult } from '../checks.ts';
+import { requireCapabilities } from '../capabilities.ts';
 import type { AppDeps } from '../deps.ts';
 import { RUN_GSD_SETTINGS } from '../run-gsd-config.ts';
 import { blockRun } from './blocked.ts';
+import { runRestrictedItem } from './restricted.ts';
 import type { RunStage, RunStageContext } from './stage.ts';
 
 // `moved`: the handler committed a transition, so the stage is done and the loop reads the new state.
@@ -60,6 +62,9 @@ export const contractReadyStage: RunStage = async (ctx: RunStageContext, row: Ru
   if (!steps.ok) return steps;
   // A step the action decided to skip (no dependencies declared) is as done as a completed one: a resume repeats nothing.
   const done = new Set(steps.value.filter((s) => s.status === 'completed' || s.status === 'skipped').map((s) => s.step));
+  // A restricted run (plan 04-23; CON-4, D-12) never takes the contained road below: the mode is the stored contract's, read here on every stage entry, so a resume of a
+  // killed restricted run arrives in the same place and cannot become a contained run.
+  if (runModeOf(loaded.value.body) === 'restricted') return restrictedContractReady(ctx, row, loaded.value.body, done);
 
   for (const action of RUN_NEXT_ACTIONS.contract_ready ?? []) {
     const registered = handlers.get(action);
@@ -75,6 +80,26 @@ export const contractReadyStage: RunStage = async (ctx: RunStageContext, row: Ru
 };
 
 const WORKSPACE_STEP = 'workspace:prepare';
+
+// The preparation of a restricted run: the clone at the pin, and nothing else. The dependency install, the check validation and the baseline run repository code (through
+// AVARICE's own sandbox, whatever the host is), and a restricted run runs no check: its host lacks required enforcement, and no gate follows. No GSD configuration is
+// written either, because no `/gsd-quick` unit runs. Then the one restricted invocation, which ends the run blocked (restricted.ts).
+async function restrictedContractReady(ctx: RunStageContext, row: RunRow, contract: RunContract, done: ReadonlySet<string>): Promise<Result<void>> {
+  const prepare = handlers.get('prepare-workspace');
+  if (prepare === undefined) return err({ kind: 'internal', cause: 'the prepare-workspace action is not registered' });
+  if (!done.has(WORKSPACE_STEP)) {
+    const marked = ctx.checkpoint('prepare-workspace');
+    if (!marked.ok) return marked;
+    const prepared = await prepare.handler(ctx, row, contract);
+    if (!prepared.ok) return prepared;
+  }
+  const workspace = preparedWorkspace(ctx.deps, ctx.runId);
+  if (!workspace.ok) return workspace;
+  const itemId = firstItemToRun(ctx.deps, ctx.runId);
+  if (!itemId.ok) return itemId;
+  const ran = await runRestrictedItem(ctx, { row, contract, itemId: itemId.value, workspacePath: workspace.value.path, branch: workspace.value.branch });
+  return ran.ok ? ok(undefined) : ran;
+}
 
 registerContractReadyAction(
   'prepare-workspace',
@@ -357,10 +382,22 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
   // host can answer, whether it enforces containment (CON-3).
   const failures: G0Failure[] = checkG0Static(contract);
   const enforcement = deps.host.descriptor.attributes?.['enforcement'];
-  const hostFailed = enforcement !== 'enforced';
-  if (hostFailed) {
-    failures.push({ rule: 'host-enforcement', detail: `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}`.slice(0, MAX_DETAIL) });
+  const enforcementFailed = enforcement !== 'enforced';
+  // Why the host is not enforced, when it says (its descriptor's reason); a host that cannot be contained says how to ask for restricted mode (plan 04-23, D-12).
+  const hostReason = deps.host.descriptor.attributes?.['reason'];
+  const because = typeof hostReason === 'string' && hostReason !== '' ? `: ${hostReason}` : '';
+  if (enforcementFailed) {
+    failures.push({ rule: 'host-enforcement', detail: `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}${because}`.slice(0, MAX_DETAIL) });
   }
+  // FR-16: a host that enforces containment but does not declare what a unit needs is refused here, before any invocation, naming the capability and
+  // the reduced mode. A host that failed enforcement is already refused above, so the capability failure is not a second row for the same cause.
+  const required = requireCapabilities(deps, 'run.unit');
+  const unsupported = !required.ok && required.error.kind === 'unsupported' ? required.error : undefined;
+  if (unsupported !== undefined && !enforcementFailed) {
+    failures.push({ rule: 'capability', detail: `${unsupported.capability} is not declared by the host; reduced mode: ${unsupported.reducedMode ?? 'none'}`.slice(0, MAX_DETAIL) });
+  }
+  if (!required.ok && unsupported === undefined) return required;
+  const hostFailed = enforcementFailed || unsupported !== undefined;
   // A kill between this insert and the transition repeats the action on resume. Gate rows are insert-only and tell the truth about each
   // evaluation, but a repeat that finds the identical verdict already recorded for the same contract, policy and revision adds nothing.
   const contractVersion = loaded.value?.version ?? 1;
@@ -401,12 +438,19 @@ registerContractReadyAction('verify-enforcement', (ctx, row, contract) => {
     }
     ctx.note(
       hostFailed
-        ? `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`
+        ? unsupported !== undefined && !enforcementFailed
+          ? `host ${deps.host.descriptor.adapter} does not declare ${unsupported.capability}; reduced mode: ${unsupported.reducedMode ?? 'none'}`
+          : `host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed${because}`
         : `G0 failed: ${failures.map((f) => f.rule).join(', ')}`.slice(0, MAX_DETAIL),
     );
     const blocked = ctx.transition(row, 'blocked_on_decision', 'none', {
       reason: hostFailed ? 'enforcement_failure' : 'decision',
-      data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown', gate: 'G0' },
+      data: {
+        host: deps.host.descriptor.adapter,
+        enforcement: enforcement ?? 'unknown',
+        gate: 'G0',
+        ...(unsupported !== undefined ? { capability: unsupported.capability, ...(unsupported.reducedMode !== undefined ? { reducedMode: unsupported.reducedMode } : {}) } : {}),
+      },
       ...place,
     });
     return blocked.ok ? ok('moved') : blocked;

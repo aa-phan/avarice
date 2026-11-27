@@ -234,7 +234,7 @@ The targets below are proposals. None has been measured; [operations-and-testing
 | AC-5 | Secret patterns found in events, evidence or artifacts after the redaction suite | 0 |
 | AC-6 | Cross-profile reads in the isolation suite | 0 |
 | AC-7 | Domain-code changes needed to run the portability proof against the fake remote adapter | 0 lines |
-| AC-8 | Context retrieval quality on the evaluation set | task success rate with the context pack, index adapters present, at least equal to a full-repo baseline at no more than 50% of its tokens |
+| AC-8 | Context retrieval quality on the evaluation set | task success rate with the context pack, index adapters present, at least equal to a full-repo baseline at no more than 95% of its tokens, inclusive ([ADR-016](decisions/ADR-016-ac8-token-bound.md)) |
 | AC-9 | Routine low-risk tasks in the benchmark that reach `ready_for_review` with no phase-transition prompt | at least 70%, with defect rate no worse than attended runs of the same tasks |
 | AC-10 | Unnecessary escalations (a reviewer judges the answer was available in code, docs or an authorized default) | under 15% of escalations |
 | AC-11 | Containment failures (a write, read, command or endpoint outside the contract that succeeded on a path listed as prevented) | 0 in the containment suite and in benchmark runs |

@@ -3,6 +3,7 @@
 // working-tree file, so an uncommitted edit, a dirty checkout or a half-written file cannot change an answer, and it reads no clock
 // (the caller turns a commit time into an age with its own clock).
 import type { Result } from '../domain/result.ts';
+import type { CapabilityDescriptor } from './capability.ts';
 
 export interface ConventionsAt {
   // The commit the text was read from: the pin itself, or a descendant of the pin whose whole diff against the pin is under `.avarice/`.
@@ -21,6 +22,8 @@ export interface Staleness {
 }
 
 export interface RunSource {
+  // What the adapter can do (FR-16); composition records it and a step requirement can name it.
+  readonly descriptor: CapabilityDescriptor;
   // The source repository's HEAD commit.
   head(repoPath: string): Result<string>;
   // D-16: the newest commit C on the first-parent chain from `head` back to `pin` whose diff against the pin touches only `.avarice/**`

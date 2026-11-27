@@ -4,7 +4,8 @@
 // line and judge it, start the host in its own process group in the staging copy with an allowlisted environment,
 // read its stream-json while it runs, enforce the wall clock ourselves (SIGTERM, then SIGKILL after a grace), and
 // classify what happened from the host's final result, the exit, the staging HEAD and our own hook events, never
-// from model text. The transcript is stored as an artifact only after secrets are redacted.
+// from model text. The transcript is redacted line by line before the cap counts it. By default a run keeps a redacted
+// summary and the digest of the redacted transcript; the whole redacted transcript is stored only on an opt-in (D-14).
 //
 // Fail closed: any refusal before the spawn is `denied` with rule `enforcement_failure:{reason}` and nothing is
 // started. The descriptor says `enforced` only when the startup check (hook entry, sandbox, admitted version) passed.
@@ -17,23 +18,29 @@ import { join } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { classifyOutcome } from '../../domain/outcome.ts';
-import { redactSecrets } from '../../domain/secret-patterns.ts';
+import { sha256Hex } from '../../domain/digest.ts';
+import type { Redactor, TranscriptRetention } from '../../domain/redactor.ts';
 import type { InvocationScope } from '../../domain/invocation-scope.ts';
 import type { AgentHost, InvocationOutcome, InvocationRequest, PermissionDenial, ReapRequest } from '../../ports/agent-host.ts';
 import type { ArtifactStore } from '../../ports/artifact-store.ts';
 import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
+import { processRedactor } from '../redaction/process-redactor.ts';
 import { buildInvocationEnv } from './env.ts';
 import { canonicalPath } from './settings.ts';
-import { assertLaunchArgsSafe, buildLaunchArgs } from './launch-args.ts';
-import { checkHostReady, checkLaunchReady } from './launch-preflight.ts';
+import { assertLaunchArgsSafe, assertRestrictedLaunchArgsSafe, buildLaunchArgs, restrictedLaunchArgs } from './launch-args.ts';
+import { checkHostReady, checkLaunchReady, checkRestrictedHostReady, checkRestrictedLaunchReady } from './launch-preflight.ts';
+import type { HostVersionOk } from './launch-preflight.ts';
 import { writeInvocationFiles } from './invocation-files.ts';
 import type { GsdLocations, InvocationFiles } from './invocation-files.ts';
 import type { PreambleFingerprint } from './hook-policy.ts';
 import { StreamJsonParser } from './stream-json.ts';
+import { TranscriptCollector } from './transcript-collector.ts';
 
 export const DEFAULT_KILL_GRACE_MS = 10_000;
 export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
+// The environment variable that stores the whole redacted transcript of every invocation, beside the profile's `retention.transcripts: "full"`.
+export const DEBUG_TRANSCRIPTS_ENV = 'AVARICE_DEBUG_TRANSCRIPTS';
 // How long to wait for the output pipe to close after the process has exited, before it is cut.
 const STDOUT_CLOSE_WAIT_MS = 2_000;
 const MAX_EXPECTED_FILE_BYTES = 1024 * 1024;
@@ -49,6 +56,9 @@ export interface BeforeSpawn {
 }
 
 export interface ClaudeHostOptions {
+  // `contained` (default): the contained launch line, behind every containment probe. `restricted` (plan 04-23, CON-4, D-12): only the `--restricted` line, for a host that
+  // cannot be contained; its descriptor says enforcement `restricted`, never `enforced`, and an adapter in this mode can launch nothing else.
+  mode?: 'contained' | 'restricted';
   claudeBin: string;
   // `src/hook/pre-tool-use.ts`, the script the generated settings run.
   hookEntry: string;
@@ -69,6 +79,12 @@ export interface ClaudeHostOptions {
   // SIGTERM to SIGKILL grace (default 10 s).
   killGraceMs?: number;
   maxTranscriptBytes?: number;
+  // What is kept of the transcript: `summary` (default) or `full` (the profile's `retention.transcripts`).
+  transcripts?: TranscriptRetention;
+  // Store the whole redacted transcript whatever the profile says. Default: AVARICE_DEBUG_TRANSCRIPTS=1 in `env`.
+  debugTranscripts?: boolean;
+  // The redactor the transcript lines and the summary text pass through (default: the process redactor).
+  redactor?: Redactor;
 }
 
 function refuse(reason: string): Result<never> {
@@ -88,15 +104,17 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 export class ClaudeHostAdapter implements AgentHost {
   readonly #o: ClaudeHostOptions;
-  #ready: Result<{ claudeVersion: string }> | undefined;
+  #ready: Result<HostVersionOk> | undefined;
+  #restrictedReady: Result<void> | undefined;
 
   constructor(options: ClaudeHostOptions) {
     this.#o = options;
   }
 
   // The startup check runs on first use of the descriptor (once per adapter): `enforced` only when the hook entry
-  // can be read, the sandbox runs and `claude --version` is an admitted version.
-  #readiness(): Result<{ claudeVersion: string }> {
+  // can be read, the sandbox runs and `claude --version` is a verified version or an unverified patch whose flags are listed; the
+  // descriptor says which (`admission`, D-20).
+  #readiness(): Result<HostVersionOk> {
     this.#ready ??= checkHostReady({
       claudeBin: this.#o.claudeBin,
       hookEntry: this.#o.hookEntry,
@@ -105,7 +123,25 @@ export class ClaudeHostAdapter implements AgentHost {
     return this.#ready;
   }
 
+  // The restricted mode's startup check, once per adapter: `claude --help` lists `--restricted`.
+  #restrictedReadiness(): Result<void> {
+    this.#restrictedReady ??= checkRestrictedHostReady({ claudeBin: this.#o.claudeBin });
+    return this.#restrictedReady;
+  }
+
   get descriptor(): CapabilityDescriptor {
+    if (this.#o.mode === 'restricted') {
+      const ready = this.#restrictedReadiness();
+      return {
+        port: 'agent-host',
+        adapter: 'claude-code',
+        version: ADAPTER_VERSION,
+        // No shell execution and no contained invocation: the restricted host runs analysis and planning only.
+        capabilities: { 'restricted-invocation': ready.ok, headless: true, resume: false },
+        attributes: ready.ok ? { enforcement: 'restricted', mode: 'restricted' } : { enforcement: 'none', mode: 'restricted', reason: ready.error.kind === 'denied' ? ready.error.rule : ready.error.kind },
+        offline: false,
+      };
+    }
     const ready = this.#readiness();
     return {
       port: 'agent-host',
@@ -113,7 +149,7 @@ export class ClaudeHostAdapter implements AgentHost {
       version: ADAPTER_VERSION,
       capabilities: { 'contained-invocation': ready.ok, headless: true, resume: false },
       attributes: ready.ok
-        ? { enforcement: 'enforced', claudeVersion: ready.value.claudeVersion }
+        ? { enforcement: 'enforced', claudeVersion: ready.value.claudeVersion, admission: ready.value.admission }
         : { enforcement: 'none', reason: ready.error.kind === 'denied' ? ready.error.rule : ready.error.kind },
       offline: false,
     };
@@ -167,29 +203,45 @@ export class ClaudeHostAdapter implements AgentHost {
     if (!files.ok) return refuse(`invocation-files:${files.error.kind}`);
     o.onBeforeSpawn?.({ invDir, files: files.value, request: req });
 
-    // 2. Every containment layer, including the hook denying a write in a self-test, or nothing starts.
-    const ready = checkLaunchReady({
-      settingsFile: files.value.settingsFile,
-      claudeBin: o.claudeBin,
-      policyFile: files.value.policyFile,
-      ...(o.sandboxProbe !== undefined ? { sandboxProbe: o.sandboxProbe } : {}),
-    });
+    // 2. Every containment layer, including the hook denying a write in a self-test, or nothing starts. A restricted adapter asks for the one thing
+    // its line stands on instead: a host that lists `--restricted`, and run settings that deny by default.
+    const restricted = o.mode === 'restricted';
+    const ready = restricted
+      ? checkRestrictedLaunchReady({ claudeBin: o.claudeBin, settingsFile: files.value.settingsFile, ...(run ? {} : { extensions: true }) })
+      : checkLaunchReady({
+          settingsFile: files.value.settingsFile,
+          claudeBin: o.claudeBin,
+          policyFile: files.value.policyFile,
+          ...(o.sandboxProbe !== undefined ? { sandboxProbe: o.sandboxProbe } : {}),
+        });
     if (!ready.ok) return ready;
 
     // 3. The generated argv, judged before it is used.
-    const args = buildLaunchArgs({
-      prompt: req.prompt,
-      settingsFile: files.value.settingsFile,
-      pluginDir: files.value.pluginDir,
-      agentsFile: files.value.agentsFile,
-      mcpFile: files.value.mcpFile,
-      model: req.model,
-      costCapUsd: req.costCapUsd,
-      sessionId,
-      ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
-      ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
-    });
-    const safe = assertLaunchArgsSafe(args);
+    const args = restricted
+      ? restrictedLaunchArgs({
+          prompt: req.prompt,
+          settingsFile: files.value.settingsFile,
+          mcpFile: files.value.mcpFile,
+          model: req.model,
+          costCapUsd: req.costCapUsd,
+          sessionId,
+          ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+          // An onboarding's restricted map is delivered GSD's mapper the way the contained map is; a restricted run loads no extension (plan 04-24; CON-4, D-12).
+          ...(run ? {} : { pluginDir: files.value.pluginDir, agentsFile: files.value.agentsFile }),
+        })
+      : buildLaunchArgs({
+          prompt: req.prompt,
+          settingsFile: files.value.settingsFile,
+          pluginDir: files.value.pluginDir,
+          agentsFile: files.value.agentsFile,
+          mcpFile: files.value.mcpFile,
+          model: req.model,
+          costCapUsd: req.costCapUsd,
+          sessionId,
+          ...(req.resumeSessionId !== undefined ? { resumeSessionId: req.resumeSessionId } : {}),
+          ...(req.agentName !== undefined ? { agent: req.agentName } : {}),
+        });
+    const safe = restricted ? assertRestrictedLaunchArgsSafe(args, run ? {} : { extensions: true }) : assertLaunchArgsSafe(args);
     if (!safe.ok) return refuse(safe.error.kind === 'denied' ? safe.error.rule.replace(/^launch_args:/, 'launch-args:') : 'launch-args');
     const env = buildInvocationEnv(o.env ?? process.env, {
       gsdCoreBin: join(o.gsd.gsdCoreDir, 'bin'),
@@ -240,11 +292,30 @@ export class ClaudeHostAdapter implements AgentHost {
       expectedFilesPresent,
     });
 
-    // 6. The transcript, redacted, as an artifact. A transcript that cannot be stored is an error, not a silent gap.
-    const text = redactSecrets(ran.transcript);
-    const bytes = new TextEncoder().encode(text);
-    const stored = o.artifacts.put(bytes, { kind: 'transcript', runId: req.runId });
-    if (!stored.ok) return stored;
+    // 6. The transcript, redacted line by line before the cap (see #run). By default a summary and the transcript's digest are kept;
+    // the whole redacted transcript is stored only on an opt-in (D-14). A summary or transcript that cannot be stored is an error, not a silent gap.
+    const redactor = o.redactor ?? processRedactor;
+    const bytes = new TextEncoder().encode(ran.transcript);
+    const transcriptDigest = `sha256:${sha256Hex(bytes)}`;
+    const summaryText = result?.finalTextTail !== undefined ? redactor.redact(result.finalTextTail) : undefined;
+    const summary = new TextEncoder().encode(
+      JSON.stringify({
+        sessionId,
+        turns: result?.numTurns ?? 0,
+        costUsd: result?.totalCostUsd ?? 0,
+        toolUses: parsed.toolUses,
+        ...(summaryText !== undefined ? { resultText: summaryText } : {}),
+      }),
+    );
+    const summaryStored = o.artifacts.put(summary, { kind: 'transcript-summary', runId: req.runId });
+    if (!summaryStored.ok) return summaryStored;
+    const whole = o.transcripts === 'full' || (o.debugTranscripts ?? (o.env ?? process.env)[DEBUG_TRANSCRIPTS_ENV] === '1');
+    let stored: { digest: string; size: number } | undefined;
+    if (whole) {
+      const put = o.artifacts.put(bytes, { kind: 'transcript', runId: req.runId });
+      if (!put.ok) return put;
+      stored = put.value;
+    }
 
     return ok({
       sessionId,
@@ -254,7 +325,9 @@ export class ClaudeHostAdapter implements AgentHost {
       durationMs,
       headBefore: headBefore.value,
       headAfter: headAfter.value,
-      transcriptArtifact: stored.value.digest,
+      ...(stored !== undefined ? { transcriptArtifact: stored.digest } : {}),
+      transcriptDigest,
+      transcriptSummaryArtifact: summaryStored.value.digest,
       // The tail of the final result text, as data for the one caller that reads it (a pause question). It goes nowhere else:
       // not into `details`, an event, a step result or a log line.
       ...(result?.finalTextTail !== undefined ? { question: result.finalTextTail } : {}),
@@ -263,10 +336,15 @@ export class ClaudeHostAdapter implements AgentHost {
         signal: ran.signal,
         timedOut: ran.timedOut,
         headMoved: classified.headMoved,
-        transcriptBytes: stored.value.size,
+        transcriptBytes: bytes.length,
+        transcriptSummaryBytes: summaryStored.value.size,
         hookDenies: denies.value.total,
         hookBudgetDenies: denies.value.budget,
         numTurns: result?.numTurns ?? 0,
+        inputTokens: parsed.usage.inputTokens,
+        cacheCreationTokens: parsed.usage.cacheCreationTokens,
+        cacheReadTokens: parsed.usage.cacheReadTokens,
+        outputTokens: parsed.usage.outputTokens,
         resultSeen: result !== undefined,
         ...(result?.isError !== undefined ? { isError: result.isError } : {}),
         ...(result?.subtype !== undefined ? { subtype: result.subtype } : {}),
@@ -297,9 +375,8 @@ export class ClaudeHostAdapter implements AgentHost {
     }
 
     const parser = new StreamJsonParser();
-    const chunks: Buffer[] = [];
-    let kept = 0;
-    let truncated = false;
+    // The parser reads the raw stream (the outcome never depends on what is stored); the collector redacts each line before the cap counts it.
+    const collector = new TranscriptCollector(o.redactor ?? processRedactor, cap);
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
 
@@ -328,14 +405,7 @@ export class ClaudeHostAdapter implements AgentHost {
 
     child.stdout?.on('data', (chunk: Buffer) => {
       parser.push(chunk);
-      if (kept < cap) {
-        const room = cap - kept;
-        chunks.push(chunk.length <= room ? chunk : chunk.subarray(0, room));
-        kept += Math.min(chunk.length, room);
-        if (chunk.length > room) truncated = true;
-      } else {
-        truncated = true;
-      }
+      collector.push(chunk);
     });
     // stderr is drained and dropped: it is host diagnostics, not evidence, and may carry paths.
     child.stderr?.resume();
@@ -366,8 +436,7 @@ export class ClaudeHostAdapter implements AgentHost {
       child.stdout.destroy();
     }
 
-    const transcript = Buffer.concat(chunks).toString('utf8') + (truncated ? `\n[avarice: transcript truncated at ${cap} bytes]\n` : '');
-    return ok({ parsed: parser.finish(), transcript, exitCode: exit.code, signal: exit.signal, timedOut });
+    return ok({ parsed: parser.finish(), transcript: collector.finish(), exitCode: exit.code, signal: exit.signal, timedOut });
   }
 
   // Ends any process that carries the invocation's `--session-id` or `--resume` (a resumed host carries the latter): a

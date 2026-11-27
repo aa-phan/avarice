@@ -105,7 +105,7 @@ describe('budget rows come from the contract', () => {
     assert.deepEqual(Object.keys(budgets).sort(), ['costUsd', 'invocations', 'subagentsTotal', 'toolCalls', 'wallClockMs']);
     assert.equal(budgets['invocations']?.limit_value, 6, 'a full map with its retry and interruption relaunches (4), intel (1) and knowledge (1)');
     assert.equal(budgets['toolCalls']?.limit_value, 600);
-    assert.equal(budgets['subagentsTotal']?.limit_value, 8, 'a full map (4) and its retry (4); the knowledge pass runs no subagent');
+    assert.equal(budgets['subagentsTotal']?.limit_value, 12, 'a full map (4 mappers and 2 re-runs) and its retry (the same); the knowledge pass runs no subagent');
     assert.equal(budgets['wallClockMs']?.limit_value, 45 * 60_000);
     assert.equal(budgets['costUsd']?.limit_value, 12);
     assert.equal(budgets['costUsd']?.exactness, 'estimated');
@@ -133,9 +133,9 @@ describe('budget rows come from the contract', () => {
     assert.equal(row(roots, 'subagentsTotal').limit_value, 2);
 
     const aboveDerived = fixture();
-    const tooMany = onboard(aboveDerived.roots, aboveDerived.repo, {}, '--budget', 'subagentsTotal=9');
+    const tooMany = onboard(aboveDerived.roots, aboveDerived.repo, {}, '--budget', 'subagentsTotal=13');
     assert.notEqual(tooMany.code, 0);
-    assert.match(tooMany.stdout + tooMany.stderr, /budgets can only be lowered: 9 is above the 8 derived for mapping mode full/);
+    assert.match(tooMany.stdout + tooMany.stderr, /budgets can only be lowered: 13 is above the 12 derived for mapping mode full/);
     assert.equal(rows<{ n: number }>(aboveDerived.roots, 'SELECT count(*) AS n FROM budgets')[0]?.n, 0);
 
     const second = fixture();
@@ -291,13 +291,13 @@ describe('reservation and settlement', () => {
       assert.equal(toolCalls.limit, 600);
       assert.equal(toolCalls.used, 5);
 
-      // The subagent limit of a full map: 4 x 2 (deferred item 11; the knowledge pass runs no subagent).
-      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 8);
+      // The subagent limit of a full map: (4 mappers + 2 re-runs) x 2 rounds (deferred item 11, plan 04-35; the knowledge pass runs no subagent).
+      const fits = deps.ledger.reserveBudget(runId, 'subagentsTotal', 12);
       assert.ok(fits.ok && fits.value.granted);
       const over = deps.ledger.reserveBudget(runId, 'subagentsTotal', 1);
       assert.ok(over.ok);
       assert.equal(over.value.granted, false);
-      assert.equal(over.value.budget.reserved, 8);
+      assert.equal(over.value.budget.reserved, 12);
       assert.equal(deps.ledger.reserveBudget(runId, 'nope', 1).ok, false);
     });
   });

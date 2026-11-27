@@ -205,6 +205,7 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
     const real = composed.value.deps;
     ledger = real.ledger;
     const spyStaging: typeof real.staging = {
+      descriptor: real.staging.descriptor,
       prepare: (input) => {
         observed.push(`prepare after ${latest()}`);
         return real.staging.prepare(input);
@@ -213,6 +214,7 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
       changes: (p, pin) => real.staging.changes(p, pin),
       describe: (p, pin) => real.staging.describe(p, pin),
       listTracked: (p, pin) => real.staging.listTracked(p, pin),
+      changedBetween: (p, from, to) => real.staging.changedBetween(p, from, to),
       ignoredByCommittedRules: (p, pin, candidates) => real.staging.ignoredByCommittedRules(p, pin, candidates),
       readTrackedAtPin: (p, pin, rels) => real.staging.readTrackedAtPin(p, pin, rels),
       read: (p, rel, max) => real.staging.read(p, rel, max),
@@ -221,8 +223,13 @@ describe('stage ordering: the checkpoint is committed before the side effect it 
         return real.staging.ensureDir(p, rel);
       },
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      stageGsdSpecs: (p, input) => real.staging.stageGsdSpecs(p, input),
+      unstageGsdSpecs: (p) => real.staging.unstageGsdSpecs(p),
+      copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
+      commitPromotion: (input) => real.staging.commitPromotion(input),
     };
     const spyArtifacts: ArtifactStore = {
+      descriptor: real.artifacts.descriptor,
       put: (bytes, meta) => {
         if (!observed.some((o) => o.startsWith('put '))) observed.push(`put after ${latest()}`);
         return real.artifacts.put(bytes, meta);
@@ -391,16 +398,16 @@ describe('a malformed map is retried once, then blocks with a decision', () => {
   });
 });
 
-describe('promotion other than none is refused', () => {
+describe('a promotion value outside none, copy and commit is refused', () => {
   // Plan 01-08 moved this refusal from the contract stage (blocked, exit 3, after an onboarding row exists) to
   // preflight: a usage error, exit 64, before a project, an onboarding, a contract or any staging exists. The
   // contract compiler still refuses it too (test/unit/domain-contracts.test.ts), as defence in depth.
-  it('--promote copy exits 64 with the compiler message before any onboarding or staging exists', () => {
+  it('--promote push exits 64 with the allowed values before any onboarding or staging exists', () => {
     const { roots, repo } = fixture();
     const before = checkoutSnapshot(repo.path);
-    const r = onboardWithFake(roots, repo, {}, ['--promote', 'copy']);
+    const r = onboardWithFake(roots, repo, {}, ['--promote', 'push']);
     assert.equal(r.code, 64, r.stderr + r.stdout);
-    assert.match(r.stderr, /request\.promote: promotion "copy" is not authorized: the onboarding preset allows only "none"/);
+    assert.match(r.stderr, /request\.promote: promotion "push" is not accepted: the allowed values are none, copy, commit/);
 
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM project_records')[0]?.n, 0);
     assert.equal(rows<{ n: number }>(roots, 'SELECT count(*) AS n FROM onboardings')[0]?.n, 0, 'no onboarding row');
@@ -475,6 +482,7 @@ describe('activation re-checks the whole staging diff against every write set (p
     const real = composed.value.deps;
     let reads = 0;
     const staging: typeof real.staging = {
+      descriptor: real.staging.descriptor,
       prepare: (input) => real.staging.prepare(input),
       head: (p) => real.staging.head(p),
       changes: (p, pin) => {
@@ -486,11 +494,16 @@ describe('activation re-checks the whole staging diff against every write set (p
       },
       describe: (p, pin) => real.staging.describe(p, pin),
       listTracked: (p, pin) => real.staging.listTracked(p, pin),
+      changedBetween: (p, from, to) => real.staging.changedBetween(p, from, to),
       ignoredByCommittedRules: (p, pin, candidates) => real.staging.ignoredByCommittedRules(p, pin, candidates),
       readTrackedAtPin: (p, pin, rels) => real.staging.readTrackedAtPin(p, pin, rels),
       read: (p, rel, max) => real.staging.read(p, rel, max),
       ensureDir: (p, rel) => real.staging.ensureDir(p, rel),
       inspectRepo: (p) => real.staging.inspectRepo(p),
+      stageGsdSpecs: (p, input) => real.staging.stageGsdSpecs(p, input),
+      unstageGsdSpecs: (p) => real.staging.unstageGsdSpecs(p),
+      copyIntoCheckout: (repoPath, files) => real.staging.copyIntoCheckout(repoPath, files),
+      commitPromotion: (input) => real.staging.commitPromotion(input),
     };
     try {
       const started = startOnboarding({ ...real, staging }, { repoPath: repo.path, policy: 'onboarding' });

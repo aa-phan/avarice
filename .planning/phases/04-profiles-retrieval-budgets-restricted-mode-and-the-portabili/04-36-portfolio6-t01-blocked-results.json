@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-evaluation",
+  "generatedAt": "2026-11-19T18:02:57.315Z",
+  "tasksFile": {
+    "path": "/Users/aphan/avarice/.claude/worktrees/phase-04/test/benchmark/phase4/eval-tasks.json",
+    "sha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z"
+  },
+  "claudeVersion": "2.1.326 (Claude Code)",
+  "caps": {
+    "runUsd": 0.4,
+    "onboardUsd": {
+      "A": 0.6,
+      "B": 0.6,
+      "C": 1.1
+    },
+    "mapUsd": 0.6
+  },
+  "projection": {
+    "runs": 18,
+    "runUsd": 7.200000000000002,
+    "onboardUsd": 13.799999999999995,
+    "mapUsd": 3.6,
+    "mapParents": 6,
+    "totalUsd": 24.599999999999998
+  },
+  "taskIds": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06"
+  ],
+  "invocations": [
+    {
+      "generatedAt": "2026-11-19T18:02:57.316Z",
+      "taskIds": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06"
+      ],
+      "arms": [
+        "A",
+        "B",
+        "C"
+      ],
+      "runs": 18,
+      "runCapUsd": 0.4,
+      "onboardCapUsd": {
+        "A": 0.6,
+        "B": 0.6,
+        "C": 1.1
+      },
+      "projection": {
+        "runs": 18,
+        "runUsd": 7.200000000000002,
+        "onboardUsd": 13.799999999999995,
+        "mapUsd": 3.6,
+        "mapParents": 6,
+        "totalUsd": 24.599999999999998
+      }
+    }
+  ],
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "A",
+      "success": false,
+      "tokens": 3907787,
+      "costUsd": 0.22764552,
+      "runId": "run_01M7TG16W8RPFH70F2SZ1X3KA5",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.12994362,
+        "tokens": 2905054,
+        "mapCostUsd": 0.05386458
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T01",
+      "arm": "B",
+      "success": false,
+      "tokens": 4812210,
+      "costUsd": 0.26532667499999985,
+      "runId": "run_01M7TH0PWT3WA6BMJ2YGR46MZJ",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.06950935999999999,
+        "tokens": 1777369,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    },
+    {
+      "task": "T01",
+      "arm": "C",
+      "success": false,
+      "tokens": 210327,
+      "costUsd": 0.006754840000000001,
+      "runId": "run_01M7TJAAB2994AVANMNWNK4EV6",
+      "state": "blocked_on_decision (decision)",
+      "tokensComplete": true,
+      "setup": {
+        "costUsd": 0.6362138900000001,
+        "tokens": 5099602,
+        "mapCostUsd": 0
+      },
+      "note": "the run left no branch to judge"
+    }
+  ],
+  "summary": {
+    "arms": {
+      "A": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 3907787,
+        "costUsd": 0.227646,
+        "judgeErrors": 0
+      },
+      "B": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 4812210,
+        "costUsd": 0.265327,
+        "judgeErrors": 0
+      },
+      "C": {
+        "runs": 1,
+        "success": 0,
+        "tokens": 210327,
+        "costUsd": 0.006755,
+        "judgeErrors": 0
+      }
+    },
+    "ac8": {
+      "pass": true,
+      "via": "C",
+      "reason": "arm C succeeds at least as often as A at 5.4% of A's tokens",
+      "arms": {
+        "B": {
+          "successOk": true,
+          "tokensOk": false,
+          "tokenShare": 1.2314412223593558
+        },
+        "C": {
+          "successOk": true,
+          "tokensOk": true,
+          "tokenShare": 0.05382253433976826
+        }
+      }
+    },
+    "knowledge": {
+      "outcome": "on",
+      "reason": "arm C does not cost more tokens than B"
+    }
+  }
+}

@@ -296,7 +296,17 @@ describe('a supervisor started on a blocked run (D-16)', () => {
   const { f, runId } = s;
 
   it('returns at once when the decision is still open: no lease taken, nothing written', async () => {
-    const eventsBefore = ledgerRows<{ n: number }>(f.roots, 'SELECT count(*) AS n FROM events')[0]?.n;
+    // The detached supervisor writes the banner and notification events after `start --wait` has returned, so the snapshot waits until the
+    // count is the same on two reads 250 ms apart (at most 20 reads); a count that never settles fails here, not as a false "wrote something".
+    const countEvents = (): number | undefined => ledgerRows<{ n: number }>(f.roots, 'SELECT count(*) AS n FROM events')[0]?.n;
+    let eventsBefore = countEvents();
+    for (let reads = 1; ; reads += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const next = countEvents();
+      if (next === eventsBefore) break;
+      assert.ok(reads < 20, `the event count never settled: it was ${String(eventsBefore)} and then ${String(next)} after ${reads} reads`);
+      eventsBefore = next;
+    }
     const before = runRowOf(f.roots, runId);
     const live = inProcess(f.roots, s17Host());
     try {

@@ -52,8 +52,8 @@ TOOLS=("$NODE" --disable-warning=ExperimentalWarning "$HERE/scripts/exit-run-pha
 
 CONFIG="$HERE/test/benchmark/portfolio/avarice-config.json"
 BRIEFS=("$HERE/test/benchmark/phase3/p3-run1-copy-fallback.md" "$HERE/test/benchmark/phase3/p3-run2-graduation-label.md" "$HERE/test/benchmark/phase3/p3-run3-theme-toggle.md")
-DRY_OUT_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-28-dry-run.json"
-EVID_DEFAULT="$HERE/.planning/phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json"
+DRY_OUT_DEFAULT="$HERE/.planning/milestones/v1.0-phases/03-decisions-independent-work-and-amendments/03-28-dry-run.json"
+EVID_DEFAULT="$HERE/.planning/milestones/v1.0-phases/03-decisions-independent-work-and-amendments/03-57-evidence-exit.json"
 
 usage() {
   echo "usage: scripts/exit-run-phase3.sh --dry-run [--source REPO]" >&2

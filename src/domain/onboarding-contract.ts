@@ -1,7 +1,7 @@
 // Onboarding contract compiler (docs/repository-onboarding.md "Onboarding contract";
 // docs/contracts-and-state.md "Run contract"). Pure: the clock, ids and preflight facts are arguments.
 //
-// The compiler is where RC-5 is enforced for onboarding: promotion other than `none` and any budget
+// The compiler is where RC-5 is enforced for onboarding: a promotion value outside none, copy and commit and any budget
 // above the preset are refused here, so no later stage has to remember to check.
 import { digestOf } from './digest.ts';
 import { err, ok } from './result.ts';
@@ -9,13 +9,15 @@ import type { Result } from './result.ts';
 import { MAPPING_MODES } from './mapping.ts';
 import type { MappingMode } from './mapping.ts';
 
-// How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, times
-// the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
+// How the run's subagent total is derived (deferred item 11): the subagents one map round spawns in the mapping mode, plus the mapper re-runs the mode
+// allows in a round (plan 04-35), times the map rounds (the first map and its retries), plus the knowledge pass allowance, plus intel's none. Stored in the contract
 // so the number is explained by the contract that carries it. The knowledge pass runs no subagent since plan 01-19 decision B (the
 // model reads the chunks itself, no graphify skill), so its allowance is 0.
 export interface SubagentDerivation {
   mode: MappingMode;
   mapAgents: number;
+  // Mappers the orchestrator may spawn again in one round on top of `mapAgents`.
+  mapRerunAllowance: number;
   mapRounds: number;
   knowledgeAllowance: number;
   intelAgents: number;
@@ -39,6 +41,20 @@ export interface InvocationDerivation {
   // The derived ceiling; `budgets.invocations` is this value or a lower override.
   total: number;
   formula: string;
+}
+
+// What the owner can ask AVARICE to do with the accepted map after activation (ONB-6, D-15). `none` is the default; `copy` and `commit` are explicit
+// opt-ins, and each is a privileged action that the approval gate lets through because this contract names it.
+export const PROMOTE_MODES = ['none', 'copy', 'commit'] as const;
+export type PromoteMode = (typeof PROMOTE_MODES)[number];
+
+export function isPromoteMode(value: unknown): value is PromoteMode {
+  return typeof value === 'string' && (PROMOTE_MODES as readonly string[]).includes(value);
+}
+
+// The refusal text of an unknown promotion value, shared by the preflight and the compiler so both name the same set.
+export function promoteRefusal(value: unknown): string {
+  return `promotion ${JSON.stringify(value)} is not accepted: the allowed values are ${PROMOTE_MODES.join(', ')}`;
 }
 
 export interface OnboardingBudgets {
@@ -91,7 +107,7 @@ export interface OnboardingContract {
     prohibited: string[];
   };
   budgets: OnboardingBudgets;
-  delivery: { promote: 'none' };
+  delivery: { promote: PromoteMode };
   indexes: { codeGraph: boolean; intel: boolean; knowledge: boolean };
 }
 
@@ -154,7 +170,7 @@ export const ONBOARDING_PRESET = {
     'scope expansion',
   ],
   prohibitedDecisions: ['policy changes', 'budget changes', 'credential changes', 'merge'],
-  promote: 'none',
+  promote: 'none' as PromoteMode,
   budgets: {
     wallClockMinutes: 45,
     wallClockShares: { map: 20, intel: 10, knowledge: 15 },
@@ -168,6 +184,11 @@ export const ONBOARDING_PRESET = {
     // What one map round spawns: GSD's full map spawns 4 mappers, its fast map (scan, tech+arch) one; `paths` needs the full
     // file set, `skip` and `adopt` run no mapper.
     mapAgents: { full: 4, fast: 1, paths: 4, skip: 0, adopt: 0 },
+    // Mapper re-runs one map round may spawn on top of `mapAgents` (plan 04-35, owner ruling 2026-11-18). GSD's map-codebase workflow spawns 4 mappers, and its orchestrator
+    // spawned a fifth in the retry round of the live full map of auto_search_workflow (a re-run of the concerns mapper, whose first answer had concluded that Python
+    // modules were absent), which the total of 8 refused. A full map allows two such re-runs per round: the measured need (one) with one more of headroom. The other
+    // modes are unchanged, and a hook denial still blocks the onboarding.
+    mapRerunAllowance: { full: 2, fast: 0, paths: 0, skip: 0, adopt: 0 },
     // The knowledge pass starts no subagent (decision B, 2026-11-03): one model session reads the chunked documents itself.
     knowledgeAllowance: 0,
     intelAgents: 0,
@@ -232,21 +253,24 @@ function readDirectories(field: string, raw: unknown): Result<string[]> {
 
 const unique = (items: readonly string[]): string[] => [...new Set(items)];
 
-// The subagent total for a mapping mode and a map retry limit: map agents for the mode x (1 + retries) + the knowledge pass
+// The subagent total for a mapping mode and a map retry limit: (map agents for the mode + its re-run allowance) x (1 + retries) + the knowledge pass
 // allowance + intel's none (docs/repository-onboarding.md "Onboarding contract").
 export function deriveSubagents(mode: MappingMode, retry: number): SubagentDerivation {
-  const { mapAgents, knowledgeAllowance, intelAgents } = ONBOARDING_PRESET.subagents;
+  const { mapAgents, mapRerunAllowance, knowledgeAllowance, intelAgents } = ONBOARDING_PRESET.subagents;
   const perRound = mapAgents[mode];
+  const rerun = mapRerunAllowance[mode];
   const mapRounds = 1 + retry;
-  const total = perRound * mapRounds + knowledgeAllowance + intelAgents;
+  const total = (perRound + rerun) * mapRounds + knowledgeAllowance + intelAgents;
+  const agents = rerun > 0 ? `${perRound} map agents + ${rerun} re-run allowance (${mode})` : `${perRound} map agents (${mode})`;
   return {
     mode,
     mapAgents: perRound,
+    mapRerunAllowance: rerun,
     mapRounds,
     knowledgeAllowance,
     intelAgents,
     total,
-    formula: `${perRound} map agents (${mode}) x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (no subagent: the model reads the chunks itself) + ${intelAgents} intel = ${total}`,
+    formula: `${agents} x ${mapRounds} map rounds (1 + ${retry} retry) + ${knowledgeAllowance} knowledge (no subagent: the model reads the chunks itself) + ${intelAgents} intel = ${total}`,
   };
 }
 
@@ -369,15 +393,27 @@ function applyBudgetOverrides(raw: unknown, mode: MappingMode): Result<Onboardin
   return ok(budgets);
 }
 
+// `files.delete` (docs "Onboarding contract"): the map directory is deletable only when the existing-map answer is Refresh, and only when there is a
+// map to refresh. It is a statement about the staging worktree, where every regeneration happens; the user's checkout is never written (ONB-6).
+export function filesDeleteFor(answer: string, existingMap: string): string[] {
+  return answer === 'refresh' && existingMap !== 'none' ? [...WRITE_SETS.map] : [];
+}
+
+// The classification preflight recorded for the map the repository already has; `none` when absent or not a string.
+function existingMapOf(preflight: ContractPreflight): string {
+  const state = preflight['existingState'];
+  const value = typeof state === 'object' && state !== null ? (state as Record<string, unknown>)['codebaseMap'] : undefined;
+  return typeof value === 'string' && value !== '' ? value : 'none';
+}
+
 export function compileOnboardingContract(input: CompileInput): Result<OnboardingContract> {
   const { request, preflight } = input;
 
-  // Promotion: only `none` is authorized by the onboarding preset (RC-5). Copy and commit arrive in Phase 4.
-  if (request.promote !== undefined && request.promote !== 'none') {
-    return invalid(
-      'request.promote',
-      `promotion ${JSON.stringify(request.promote)} is not authorized: the onboarding preset allows only "none"`,
-    );
+  // Promotion: none (the default), copy or commit; anything else is refused (RC-5).
+  let promote: PromoteMode = ONBOARDING_PRESET.promote;
+  if (request.promote !== undefined) {
+    if (!isPromoteMode(request.promote)) return invalid('request.promote', promoteRefusal(request.promote));
+    promote = request.promote;
   }
 
   let mode: MappingMode = ONBOARDING_PRESET.defaultMode;
@@ -424,7 +460,7 @@ export function compileOnboardingContract(input: CompileInput): Result<Onboardin
         knowledge: [...WRITE_SETS.knowledge],
       },
       avariceWrite: [...ONBOARDING_PRESET.avariceWrite],
-      delete: [],
+      delete: filesDeleteFor(ONBOARDING_PRESET.existingMapAnswer, existingMapOf(preflight)),
     },
     knowledge: {
       documents: unique([
@@ -445,7 +481,7 @@ export function compileOnboardingContract(input: CompileInput): Result<Onboardin
       prohibited: [...ONBOARDING_PRESET.prohibitedDecisions],
     },
     budgets: budgets.value,
-    delivery: { promote: 'none' },
+    delivery: { promote },
     indexes: { ...indexes },
   });
 }

@@ -71,6 +71,7 @@ function scope(purpose: InvocationPurpose, over: { strategy?: BashStrategy; stag
     dataRoot: data,
     home,
     workRoot: over.workRoot ?? join(root, 'work'),
+    profileRoots: [],
     workspace: {
       topLevelEntries: ['.git', '.planning', 'docs', 'package.json', 'src'],
       planningEntries: ['PROJECT.md', 'config.json', 'phases'],
@@ -416,7 +417,7 @@ describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () 
   });
   after(() => rmSync(runRoot, { recursive: true, force: true }));
 
-  function runScope(clonePath: string = clone) {
+  function runScope(clonePath: string = clone, profileRoots: string[] = []) {
     return computeRunScope({
       contract: {
         files: { write: ['src/hooks/useSwipeStep.ts', 'tests/unit/**'], create: [], artifacts: ['.planning/quick/**'], protected: ['package.json', '.github/**'], secretGlobs: ['**/.env'] },
@@ -428,6 +429,7 @@ describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () 
       dataRoot: data,
       home,
       workRoot: join(runRoot, 'work'),
+      profileRoots,
       scratchDir: scratch,
       workspace: {
         topLevelEntries: ['.git', '.planning', 'package.json', 'src', 'tests'],
@@ -459,6 +461,15 @@ describe('the run purpose settings (CON-2, CON-5, CON-6, RC-4; plan 02-08)', () 
     }
     assert.ok(deny.includes(`Edit(${slash(data)}/**)`));
     assert.ok(deny.includes(`Edit(${slash(join(clone, '.planning/config.json'))})`));
+  });
+
+  it('denies the roots of the other profiles to the host: a sandbox read deny and a file-tool deny for each, the own clone and scratch re-allowed (SEC-1, D-19)', () => {
+    const moved = join(runRoot, 'moved-acme-data');
+    const s = settings(runScope(clone, [moved]));
+    assert.ok(s.sandbox.filesystem.denyRead.includes(slash(moved)));
+    assert.ok(s.permissions.deny.includes(`Read(${slash(moved)}/**)`));
+    assert.ok(s.sandbox.filesystem.allowRead.includes(slash(clone)));
+    assert.ok(s.sandbox.filesystem.allowRead.includes(slash(scratch)));
   });
 
   it('drops the npm deny rule only because the contract lists an npm command: npx is still denied', () => {

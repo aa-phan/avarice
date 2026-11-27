@@ -36,6 +36,7 @@ import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import { compareInventories } from '../../domain/test-inventory.ts';
 import type { InventoryFailure } from '../../domain/test-inventory.ts';
+import { effectivePackBudget } from '../../domain/resource-bounds.ts';
 import { planNamedSpec } from '../../domain/run-contract.ts';
 import type { RunContract } from '../../domain/run-contract.ts';
 import { optionsOf } from '../../domain/decision-policy.ts';
@@ -47,10 +48,13 @@ import type { PathChange, WorkspaceSnapshot } from '../../ports/run-workspace.ts
 import { checksNotRun, measureInventory, recordedInventory, runRequiredChecks } from '../checks.ts';
 import type { CheckRunResult, InventoryMeasure } from '../checks.ts';
 import { queryContext } from '../context.ts';
+import type { PackItem } from '../context.ts';
+import { manualPackItems } from '../manual-inputs.ts';
 import { completeRunInvocation, prepareRunInvocation } from '../invocation.ts';
 import { flushDueNotifications } from '../notify.ts';
 import { faultPoint } from '../onboarding-service.ts';
-import { RUN_GSD_SETTINGS, runResumePrompt, runUnitPrompt } from '../run-gsd-config.ts';
+import { limitsOrDefaults } from '../resource-limits.ts';
+import { RUN_GSD_SETTINGS, RUN_PROMPT_MAX_BYTES, runPromptRoom, runResumePrompt, runUnitPrompt } from '../run-gsd-config.ts';
 import type { RunPromptItem } from '../run-gsd-config.ts';
 import { blockItem, blockRun, completeItemBlock, moveOn } from './blocked.ts';
 import { discardAttempt } from './discard.ts';
@@ -65,7 +69,6 @@ const GSD_CONFIG_PATH = '.planning/config.json';
 const GSD_CONFIGURE_STEP = 'gsd:configure';
 const RECORD_MAX_BYTES = 64 * 1024;
 const ARCHIVE_MAX_BYTES = 2 * 1024 * 1024;
-const PACK_BUDGET = 4000;
 const MAX_IGNORED_STORED = 200;
 const STORE = 'local';
 const RUN_RETENTION = 'run';
@@ -248,9 +251,13 @@ function recordStep(ctx: RunStageContext, step: string, attempt: number, result:
 
 // ---- context pack ------------------------------------------------------------------------------------
 
+// The pack each item of a run was last built with, kept in this process while the stage goes on (plan 04-30; CON-12). A retry of the item builds its pack from it where the cache
+// rule allows (`queryContext`'s `reuse`); the ledger keeps references and never excerpt text (S-41), so a supervisor that starts afresh has none and reads everything again.
+const LAST_PACKS = new WeakMap<RunStageContext, Map<string, PackItem[]>>();
+
 // The prompt's pack and the step that records it. Intel items come before graph items (queryContext's order); the step keeps references,
 // freshness, sizes and a digest of the pack, never an excerpt (S-41).
-async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Promise<Result<string>> {
+async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number, retry = false): Promise<Result<string>> {
   const { ctx, contract } = unit;
   const { deps } = ctx;
   const startedMs = deps.clock.nowMs();
@@ -258,14 +265,30 @@ async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Pro
   const notes: string[] = [];
   const lines: string[] = [];
   let usedTokens = 0;
+  // The pack is bound by two numbers (D-13): the profile's ceiling (`limits.contextTokens`) and the room the 32 KiB prompt leaves once the unit's own contract text and the
+  // fence around the pack are in it. The smaller is the budget; the step records both so a short pack says which bound applied.
+  const room = runPromptRoom(contract, promptItemOf(contract, unit.item.itemId));
+  const ceiling = limitsOrDefaults(deps).contextTokens;
+  const budget = effectivePackBudget(ceiling, RUN_PROMPT_MAX_BYTES, room.contractBytes, room.overhead);
+  let omitted = 0;
+  let reuse: { reused: number; refetch: Array<{ source: string; id: string; reason: string }> } | undefined;
   if (deps.context === undefined) {
     notes.push('no context sources are composed');
   } else {
-    const report = await queryContext(deps, { projectId: run.projectId, term: contract.intent.title, budget: PACK_BUDGET });
+    // The run's own id makes the pack count against the run's retrieval rows and bound its search by the contract's read lists and the run's clone (plan 04-28; CON-10, CON-11).
+    const report = await queryContext(deps, { projectId: run.projectId, term: contract.intent.title, budget, runId: run.runId, ...(retry ? { reuse: LAST_PACKS.get(ctx)?.get(unit.item.itemId) ?? [] } : {}) });
     if (!report.ok) {
       notes.push(`the index cannot answer: ${report.error.kind}`);
     } else {
       usedTokens = report.value.usedTokens;
+      omitted = report.value.omitted.length;
+      reuse = report.value.reuse;
+      const memo = LAST_PACKS.get(ctx) ?? new Map<string, PackItem[]>();
+      memo.set(unit.item.itemId, report.value.items);
+      LAST_PACKS.set(ctx, memo);
+      // Every item the pack used is a reference the run was built from: recorded with the provider's own ID, so a resume can refresh it (FR-8, FR-18).
+      const refsWritten = deps.ledger.recordTaskRefs(ctx.runId, report.value.items.map((item) => item.ref));
+      if (!refsWritten.ok) return refsWritten;
       notes.push(...report.value.notes.slice(0, 10).map((n) => storedText(n, 200)));
       report.value.items.forEach((item, index) => {
         refs.push({ source: item.source, id: item.ref.id, scope: item.ref.scope, revision: item.ref.revision ?? null, freshness: item.freshness, estTokens: item.estTokens, untrusted: item.untrusted === true });
@@ -274,8 +297,19 @@ async function contextPack(unit: Unit, run: RunRow, attemptOrdinal: number): Pro
       });
     }
   }
+  // The excerpts the owner recorded by hand (`avarice context add`) follow the index items, within what is left of the budget. Each is cited by its source and the digest of its
+  // file and is data like any other pack text: the prompt fences the whole pack, and no excerpt is a source of policy.
+  const manual = manualPackItems(deps, ctx.runId, Math.max(0, budget - usedTokens));
+  if (!manual.ok) return manual;
+  for (const item of manual.value.items) {
+    refs.push({ source: 'manual-context', id: item.ref.id, scope: item.ref.scope, revision: item.ref.revision ?? null, freshness: item.ref.freshness, estTokens: item.estTokens, untrusted: true });
+    lines.push(`${refs.length}. [manual-context] ${item.title} (${item.ref.scope} at ${item.ref.revision ?? 'an unknown revision'}, ${item.ref.freshness})`);
+    lines.push(...item.excerpt.split('\n').map((line) => `   ${line}`));
+    usedTokens += item.estTokens;
+  }
+  notes.push(...manual.value.notes.map((n) => storedText(n, 200)));
   const text = lines.join('\n');
-  const recorded = recordStep(ctx, 'context:pack', attemptOrdinal, { attemptId: null, items: refs, notes, usedTokens, digest: digestOf({ refs, text }) }, startedMs);
+  const recorded = recordStep(ctx, 'context:pack', attemptOrdinal, { attemptId: null, items: refs, notes, ceiling, effective: budget, usedTokens, omitted, ...(reuse !== undefined ? { reuse } : {}), digest: digestOf({ refs, text }) }, startedMs);
   return recorded.ok ? ok(text) : recorded;
 }
 
@@ -311,7 +345,7 @@ const isInScope = (change: PathChange, contract: RunContract): boolean =>
   (change.status === 'deleted' ? matchesAny(change.path, contract.files.delete) : matchesAny(change.path, contract.files.write) || matchesAny(change.path, contract.files.create));
 
 // The paths that break the contract, by the same rules as G2's scope and deletion checks (src/domain/gates.ts): the finding names them.
-function breaches(changes: readonly PathChange[], contract: RunContract): string[] {
+export function breaches(changes: readonly PathChange[], contract: RunContract): string[] {
   const g = contract.files;
   return changes
     .filter((c) => {
@@ -874,7 +908,7 @@ async function attemptUnit(unit: Unit, row: RunRow, options: { retry?: boolean }
     const marked = ctx.checkpoint('context-pack', { itemId: unit.item.itemId });
     if (!marked.ok) return marked;
   }
-  const pack = await contextPack(unit, row, ordinal);
+  const pack = await contextPack(unit, row, ordinal, options.retry === true);
   if (!pack.ok) return pack;
 
   // An item whose decision the owner answered runs again as a fresh unit that carries the answer (plan 03-18): its first attempt after the answer has

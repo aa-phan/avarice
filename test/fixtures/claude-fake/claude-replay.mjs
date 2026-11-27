@@ -8,6 +8,8 @@
 // The script is JSON in the file named by FAKE_CLAUDE_SCRIPT (tests make a wrapper that sets it, because the host
 // strips the environment it launches with), next to a directory FAKE_CLAUDE_DIR for the logs:
 //   version          string    answer to --version
+//   helpFlags        string[]  the flags `--help` lists, one line each (default: the flags host admission requires, plus --restricted); the
+//                    help is answered before anything is logged, so a probe never counts as a launch
 //   transcript       string    one of success, apiError, maxBudget, hookBlock (test/fixtures/stream-json.ts); null prints nothing
 //   mapFiles         "all" | "fast" | string[]   map documents to write under .planning/codebase (names such as STACK.md); not on a
 //                    launch that names an agent (`--agent`), which is the intel purpose
@@ -17,6 +19,7 @@
 //                    chunk of that plan (a document node for each file) to the chunk's `output`; map files are never written there
 //   stamp            string | false   last_mapped_commit for the documents (default: git HEAD of the working directory)
 //   writes           { relPath: content }   other files to write, relative to the working directory
+//   symlinks         { relPath: target }    symbolic links to make in the working directory, after the writes (a link out of the clone, for example)
 //   extraLines       string[]  raw lines printed before the transcript's result (for example text a secret scan must catch)
 //   resultText       string    replaces the `result` text of the transcript's result line (a pause question, for example)
 //   sleepMs          number    sleep before writing anything
@@ -26,13 +29,14 @@
 //   ignoreSigterm    boolean   ignore SIGTERM, so only SIGKILL ends the process
 //   background       boolean   start a `sleep 300` in the same process group and log its pid (children.log)
 //   commit           boolean   make a commit in the working directory (moves HEAD)
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { transcript } from '../stream-json.ts';
 import { fakeMapDocument } from '../../helpers/fake-agent-host.ts';
+import { REQUIRED_HELP_FLAGS } from '../../../src/domain/host-admission.ts';
 import { INTEL_FILE_NAMES, intelDocuments, refreshSnapshot, serializeIntel } from '../index-fixtures.ts';
 
 const argv = process.argv.slice(2);
@@ -42,6 +46,13 @@ const script = scriptPath === undefined ? {} : JSON.parse(readFileSync(scriptPat
 
 if (argv.includes('--version')) {
   process.stdout.write(`${script.version ?? '2.1.316 (Claude Code)'}\n`);
+  process.exit(0);
+}
+
+// `claude --help`: a probe, never a launch. It prints one line per flag, so a flag a script leaves out is a flag the host does not list.
+if (argv[0] === '--help') {
+  const flags = script.helpFlags ?? [...REQUIRED_HELP_FLAGS, '--restricted'];
+  process.stdout.write(`Usage: claude [options]\n${flags.map((flag) => `  ${flag} <value>  What ${flag} does`).join('\n')}\n`);
   process.exit(0);
 }
 
@@ -62,6 +73,32 @@ if (dir !== undefined) {
   launch = readFileSync(join(dir, 'started.log'), 'utf8').split('\n').filter((l) => l !== '').length;
   appendFileSync(join(dir, 'argv.jsonl'), `${JSON.stringify({ argv, cwd: process.cwd(), pid: process.pid })}\n`);
   appendFileSync(join(dir, 'env.jsonl'), `${JSON.stringify(process.env)}\n`);
+  logStagedSpecs();
+}
+
+// What the working directory holds under `.claude/gsd-core` at launch (plan 04-34): each file's path under it, mode, text and whether a write to it fails, so a
+// test can state what the host would have been able to read and change. Nothing is logged when the directory is absent, as in a contained launch.
+function logStagedSpecs() {
+  const root = join(process.cwd(), '.claude', 'gsd-core');
+  if (!existsSync(root)) return;
+  const files = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(join(root, rel), { withFileTypes: true })) {
+      const next = join(rel, entry.name);
+      if (entry.isDirectory()) walk(next);
+      else {
+        let writeError = null;
+        try {
+          closeSync(openSync(join(root, next), 'r+'));
+        } catch (error) {
+          writeError = error.code;
+        }
+        files.push({ path: next, mode: statSync(join(root, next)).mode & 0o777, text: readFileSync(join(root, next), 'utf8'), writeError });
+      }
+    }
+  };
+  walk('');
+  appendFileSync(join(dir, 'specs.jsonl'), `${JSON.stringify({ pid: process.pid, cwd: process.cwd(), files })}\n`);
 }
 
 if (script.background === true) {
@@ -103,6 +140,11 @@ if (flag('--agent') === 'gsd-intel-updater' && script.intel === true) {
   writeFile(join('.planning', 'intel', '.last-refresh.json'), refreshSnapshot(files));
 }
 for (const [rel, content] of Object.entries(script.writes ?? {})) writeFile(rel, content);
+for (const [rel, target] of Object.entries(script.symlinks ?? {})) {
+  const link = join(process.cwd(), rel);
+  mkdirSync(dirname(link), { recursive: true });
+  symlinkSync(target, link);
+}
 if (script.commit === true) git('-c', 'user.name=Fake', '-c', 'user.email=fake@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'moved by the fake host');
 
 if (script.transcript !== undefined && script.transcript !== null) {

@@ -30,6 +30,8 @@ export interface StageContext {
   activate(row: OnboardingRow, body: Readonly<Record<string, unknown>>): Result<ActivationResult>;
   // A human-readable note surfaced to the caller (for example why onboarding blocked).
   note(message: string): void;
+  // A named kill point (test-only fault injection) for a gap no commit helper marks: between a privileged action's recorded start and its end.
+  fault(name: string): void;
 }
 
 export type Stage = (ctx: StageContext, row: OnboardingRow) => Promise<Result<void>> | Result<void>;

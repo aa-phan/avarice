@@ -1,7 +1,7 @@
 {
   "term": "answer",
-  "budget": 4000,
-  "usedTokens": 57,
+  "budget": 24000,
+  "usedTokens": 432,
   "project": {
     "projectId": "<id>",
     "repoPath": "<tmp>/repo",
@@ -24,7 +24,11 @@
       "excerpt": "{\"exports\":[\"answer\",\"helper\"],\"imports\":[\"./util/strings\"],\"type\":\"entry-point\"}",
       "estTokens": 24,
       "reason": "matched \"answer\" in file-roles.json",
-      "freshness": "fresh"
+      "freshness": "fresh",
+      "untrusted": true,
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>",
+      "format": 1
     },
     {
       "source": "gsd-intel",
@@ -41,7 +45,32 @@
       "excerpt": "{\"pattern\":\"flat module layout\",\"description\":\"answer in src/index.ts calls helper; strings utilities live under src/util\"}",
       "estTokens": 33,
       "reason": "matched \"answer\" in arch-decisions.json",
-      "freshness": "fresh"
+      "freshness": "fresh",
+      "untrusted": true,
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>",
+      "format": 1
+    },
+    {
+      "source": "git-files",
+      "ref": {
+        "provider": "git-files",
+        "kind": "snippet",
+        "id": "src/index.ts:1",
+        "revision": "git:<sha1>",
+        "retrievedAt": "<iso>",
+        "scope": "src/index.ts",
+        "freshness": "fresh"
+      },
+      "title": "src/index.ts:1",
+      "excerpt": "1: export function answer(): number {\n2:   return helper();\n3: }\n4: export function helper(): number {\n5:   return 42;\n6: }",
+      "estTokens": 375,
+      "reason": "matched \"answer\" in src/index.ts",
+      "freshness": "fresh",
+      "untrusted": true,
+      "profile": "personal-local",
+      "accessScope": "sha256:<sha256>",
+      "format": 1
     }
   ],
   "omitted": [],

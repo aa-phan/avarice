@@ -73,3 +73,25 @@ export function writeStampFailingGsdCore(dir: string, realTools: string): string
   chmodSync(target, 0o755);
   return dir;
 }
+
+// A gsd-core that delegates every verb to the real gsd-tools.cjs at `realTools` except `verify codebase-drift`, which prints `drift` as
+// GSD's JSON (snake_case keys, as the real verb does). Used where the drift GSD reports is the fact under test (refresh planning, plan 04-14)
+// and the real verb's own thresholds would make the case depend on how GSD classifies a file.
+export function writeDriftOverrideGsdCore(dir: string, realTools: string, drift: Readonly<Record<string, unknown>>): string {
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const source = [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    "const { spawnSync } = require('node:child_process');",
+    'const args = process.argv.slice(2);',
+    `if (args[0] === 'verify' && args[1] === 'codebase-drift') { process.stdout.write(${JSON.stringify(JSON.stringify(drift))}); process.exit(0); }`,
+    `const r = spawnSync(process.execPath, [${JSON.stringify(realTools)}, ...args], { stdio: 'inherit', env: process.env });`,
+    'process.exit(r.status === null ? 1 : r.status);',
+    '',
+  ].join('\n');
+  const target = join(bin, 'gsd-tools.cjs');
+  writeFileSync(target, source);
+  chmodSync(target, 0o755);
+  return dir;
+}

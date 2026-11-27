@@ -8,15 +8,24 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 import type {
+  CommitPromotionInput,
+  CommitPromotionOutcome,
+  CopyOutcome,
+  GsdSpecsInput,
   PrepareInput,
+  PromotionFile,
   RepoFacts,
+  StagedGsdSpecs,
   StagingChanges,
   StagingInfo,
   StagingWorkspace,
   WorkspaceDescription,
 } from '../../ports/staging-workspace.ts';
 import { collectRepoFacts, parseStatus } from './repo-facts.ts';
+import { commitPromotion, copyIntoCheckout } from './promotion.ts';
+import { stageGsdSpecs, unstageGsdSpecs } from './staged-specs.ts';
 import { runGit } from './safe-git.ts';
 
 // SHA-1 repositories only: the evidence, the gates and the onboarding records all name 40-digit commits, so an adapter that
@@ -29,6 +38,7 @@ const MAX_IGNORE_FILES = 200;
 const MAX_IGNORE_FILE_BYTES = 1024 * 1024;
 const MAX_IGNORE_CANDIDATES = 5000;
 const MAX_READ_FILES = 200;
+const MAX_CHANGED_PATHS = 20000;
 const IGNORE_CHUNK = 500;
 
 // A candidate git can be asked about on its command line without quoting or option confusion: plain path characters only.
@@ -186,7 +196,33 @@ export function ensureConfinedDir(path: string, relPath: string): Result<void> {
   return ok(undefined);
 }
 
+// One key per StagingWorkspace method, so a method added to the port cannot go undeclared.
+const STAGING_CAPABILITIES: Record<Exclude<keyof StagingWorkspace, 'descriptor'>, true> = {
+  prepare: true,
+  head: true,
+  changes: true,
+  describe: true,
+  listTracked: true,
+  changedBetween: true,
+  readTrackedAtPin: true,
+  ignoredByCommittedRules: true,
+  read: true,
+  ensureDir: true,
+  inspectRepo: true,
+  stageGsdSpecs: true,
+  unstageGsdSpecs: true,
+  copyIntoCheckout: true,
+  commitPromotion: true,
+};
+
 export abstract class GitStagingWorkspace implements StagingWorkspace {
+  // The strategy the subclass builds a staging copy with; it is the adapter name in the descriptor.
+  protected abstract readonly strategy: StagingInfo['strategy'];
+
+  get descriptor(): CapabilityDescriptor {
+    return { port: 'staging-workspace', adapter: this.strategy, version: '1.0.0', capabilities: { ...STAGING_CAPABILITIES }, attributes: { strategy: this.strategy }, offline: true };
+  }
+
   abstract prepare(input: PrepareInput): Result<StagingInfo>;
 
   // The git directories the sandbox must deny and what it must still be able to read of the user repository.
@@ -244,6 +280,16 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
     if (!COMMIT_SHA.test(pin)) return invalid('pin', 'a full lowercase commit SHA is required');
     const listed = runGit(['ls-tree', '-r', '--name-only', '-z', pin], { cwd: path });
     return listed.ok ? ok(nulSplit(listed.value.stdout)) : failure(listed.error);
+  }
+
+  changedBetween(path: string, from: string, to: string): Result<string[]> {
+    if (!COMMIT_SHA.test(from)) return invalid('from', 'a full lowercase commit SHA is required');
+    if (!COMMIT_SHA.test(to)) return invalid('to', 'a full lowercase commit SHA is required');
+    const diff = runGit(['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', from, to, '--'], { cwd: path, neutralizeFilters: true });
+    if (!diff.ok) return failure(diff.error);
+    const names = nulSplit(diff.value.stdout);
+    if (names.length > MAX_CHANGED_PATHS) return invalid('changedBetween', `more than ${MAX_CHANGED_PATHS} paths changed`);
+    return ok(sortedUnique(names));
   }
 
   // Blobs of the pinned tree, by `git cat-file blob <pin>:<path>`: an edit in staging or in the user's checkout is never seen. A path
@@ -343,5 +389,21 @@ export abstract class GitStagingWorkspace implements StagingWorkspace {
 
   inspectRepo(repoPath: string): Result<RepoFacts> {
     return collectRepoFacts(repoPath);
+  }
+
+  stageGsdSpecs(path: string, input: GsdSpecsInput): Result<StagedGsdSpecs> {
+    return stageGsdSpecs(path, input);
+  }
+
+  unstageGsdSpecs(path: string): Result<void> {
+    return unstageGsdSpecs(path);
+  }
+
+  copyIntoCheckout(repoPath: string, files: readonly PromotionFile[]): Result<CopyOutcome> {
+    return copyIntoCheckout(repoPath, files);
+  }
+
+  commitPromotion(input: CommitPromotionInput): Result<CommitPromotionOutcome> {
+    return commitPromotion(input);
   }
 }

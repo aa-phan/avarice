@@ -165,7 +165,9 @@ describe('RUN_KILL_POINTS covers every action and transition of a run', () => {
     for (const state of ['contract_ready', 'running', 'verifying'] as const) {
       // `park` is reached only by an item that stops to ask: its kill points belong to the park suite (test/fault/run-park.test.ts), whose scenario asks. `unpark` is
       // reached only by an answered item that resumes its session: its kill points belong to the resume suite (test/fault/run-resume-session.test.ts).
-      for (const action of (RUN_NEXT_ACTIONS[state] ?? []).filter((a) => a !== 'park' && a !== 'unpark')) assert.ok((RUN_KILL_POINTS as readonly string[]).includes(`after-checkpoint:${action}`), `${state} action ${action} has a kill point`);
+      // `restricted-run` is reached only by a restricted contract, which this suite's contained scenario never builds: its kill and resume is covered in
+      // test/integration/restricted-mode.test.ts (the supervisor killed during the restricted invocation, then resumed).
+      for (const action of (RUN_NEXT_ACTIONS[state] ?? []).filter((a) => a !== 'park' && a !== 'unpark' && a !== 'restricted-run')) assert.ok((RUN_KILL_POINTS as readonly string[]).includes(`after-checkpoint:${action}`), `${state} action ${action} has a kill point`);
     }
     for (const state of ['running', 'verifying']) assert.ok((RUN_KILL_POINTS as readonly string[]).includes(`after-transition:${state}`), `the transition to ${state} has a kill point`);
     for (const point of ['after-checkpoint:context-pack#2', 'after-checkpoint:verify:checks#2', 'mid-invocation:run', 'mid-commit', 'mid-verify', 'mid-handoff']) assert.ok((RUN_KILL_POINTS as readonly string[]).includes(point), point);

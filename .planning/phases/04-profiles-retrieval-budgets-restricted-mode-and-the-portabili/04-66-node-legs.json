@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "commit": "3a6c10cb7c1424e24154f06711dd868b94b8badd",
+  "legs": [
+    {
+      "node": "/Users/aphan/.claude-edu/jobs/5be29488/tmp/node-v22.22.3-darwin-arm64/bin/node",
+      "version": "v22.22.3",
+      "command": "PATH=/Users/aphan/.claude-edu/jobs/5be29488/tmp/node-v22.22.3-darwin-arm64/bin:$PATH /Users/aphan/.claude-edu/jobs/5be29488/tmp/node-v22.22.3-darwin-arm64/bin/node --test --test-reporter=tap",
+      "startedAt": "2026-11-25T08:00:48Z",
+      "finishedAt": "2026-11-25T08:24:38Z",
+      "exitCode": 0,
+      "tests": 5722,
+      "suites": 1199,
+      "pass": 5645,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 77,
+      "todo": 0,
+      "duration_ms": 1430088
+    },
+    {
+      "node": "/opt/homebrew/bin/node",
+      "version": "v26.9.0",
+      "command": "PATH=/opt/homebrew/bin:$PATH /opt/homebrew/bin/node --test --test-reporter=tap",
+      "startedAt": "2026-11-25T08:24:38Z",
+      "finishedAt": "2026-11-25T08:47:35Z",
+      "exitCode": 0,
+      "tests": 5722,
+      "suites": 1199,
+      "pass": 5645,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 77,
+      "todo": 0,
+      "duration_ms": 1376880
+    }
+  ]
+}

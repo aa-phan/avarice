@@ -1477,7 +1477,7 @@ describe('authorization: only a fresh approval authorizes a start (plan 03-52, D
   }
 
   it('refuses every authorization file of plans 03-28 to 03-49 and the 03-49 answer-2-in-place file in particular; they stay on disk as history', () => {
-    const phaseDir = join(ROOT, '.planning', 'phases', '03-decisions-independent-work-and-amendments');
+    const phaseDir = join(ROOT, '.planning', 'milestones', 'v1.0-phases', '03-decisions-independent-work-and-amendments');
     const older = readdirSync(phaseDir).filter((f) => /^03-(2[89]|3\d|4\d)-exit-authorization\.json$/.test(f));
     assert.ok(older.includes('03-49-exit-authorization.json'), older.join(', '));
     for (const file of older) {

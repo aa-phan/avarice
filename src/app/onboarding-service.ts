@@ -17,6 +17,7 @@ import { mapStage } from './stages/map.ts';
 import { retryOrBlockStage, validateStage } from './stages/validate.ts';
 import { indexStage } from './stages/index-stage.ts';
 import { activateStage } from './stages/activate.ts';
+import { promoteStage } from './stages/promote.ts';
 import type { Stage, StageContext, TransitionOptions } from './stages/stage.ts';
 
 export const DEFAULT_LEASE_TTL_MS = 180_000;
@@ -51,6 +52,8 @@ export interface StartRequest {
   mode?: string;
   promote?: string;
   budgetOverrides?: Readonly<Record<string, unknown>>;
+  // `onboard --restricted` (plan 04-24; CON-4, D-12): the map is made under the restricted launch and the record says so.
+  restricted?: boolean;
 }
 
 // Registers the project and creates the onboarding in `discovered`. Takes no lease.
@@ -64,8 +67,20 @@ export function startOnboarding(deps: AppDeps, request: StartRequest): Result<Re
     mode: request.mode ?? 'full',
     promote: request.promote ?? 'none',
     budgetOverrides: request.budgetOverrides ?? {},
+    ...(request.restricted === true ? { restricted: true } : {}),
+    // An onboarding of a project that has an active record is a refresh of it (ONB-11); the workspace stage plans how much of the map to rebuild.
+    refresh: true,
   });
   if (!registered.ok) return registered;
+  // An onboarding left in `discovered` (by `repo add`, or a kill right after registration) is continued, and it keeps the request it was registered with. A restricted
+  // request that met a contained onboarding, or the reverse, is refused: the host that maps it is the one thing neither may be given by surprise (T-04-65).
+  if (registered.value.restricted !== (request.restricted === true)) {
+    return err({
+      kind: 'invalid',
+      field: 'restricted',
+      reason: `onboarding ${registered.value.onboardingId} of this project was registered ${registered.value.restricted ? 'with' : 'without'} --restricted and is not yet mapped; ${registered.value.restricted ? 'run it with --restricted' : 'run it without --restricted, or wait for it to end'}`,
+    });
+  }
   faultPoint('after-transition:discovered');
   faultPoint('after-checkpoint:compile-contract');
   return registered;
@@ -120,14 +135,21 @@ function makeContext(deps: AppDeps, onboardingId: string, fence: number, notes: 
     note(message) {
       notes.push(message);
     },
+    fault: faultPoint,
   };
 }
 
 // `planning_ready`: the index steps, then activation.
+// Promotion (ONB-6) follows activation in the same lease: `active` is a stop state, so it has no stage of its own, and a promotion that was started and
+// not finished is reconciled by resume, never run again.
 const planningReadyStage: Stage = async (ctx, row) => {
   const indexed = await indexStage(ctx, row);
   if (!indexed.ok) return indexed;
-  return activateStage(ctx, row);
+  const activated = await activateStage(ctx, row);
+  if (!activated.ok) return activated;
+  const now = ctx.deps.ledger.getOnboarding(ctx.onboardingId);
+  if (!now.ok) return now;
+  return now.value.state === 'active' ? promoteStage(ctx, now.value) : ok(undefined);
 };
 
 const STAGES: Readonly<Partial<Record<OnboardingState, Stage>>> = {

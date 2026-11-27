@@ -4,10 +4,11 @@
 // (is_error, subtype, terminal_reason, permission_denials, total_cost_usd, num_turns, duration_ms, session_id,
 // subagent_stats).
 //
-// Model text stays in this file with one exception: assistant messages and tool inputs are not kept, and of the
-// `result` text only a bounded tail is (`finalTextTail`: the last 2000 characters, control characters stripped). That
-// tail is how a paused unit's question reaches the supervisor (plan 03-08, AUT-1); it is model text, so the one caller
-// treats it as data and never as an instruction, an event field or a log line.
+// Model text stays in this file with two exceptions. Assistant messages and tool inputs are not kept; the calls are
+// only counted by tool name, for the transcript summary (D-14). Of the `result` text only a bounded tail is kept
+// (`finalTextTail`: the last 2000 characters, control characters stripped). That tail is how a paused unit's question
+// reaches the supervisor (plan 03-08, AUT-1); it is model text, so the one caller treats it as data and never as an
+// instruction, an event field or a log line.
 // A denied tool is recorded by name only; its input (a command, a path) is dropped. Nothing here throws on
 // malformed input: a line that is not a JSON object is counted and skipped.
 import { StringDecoder } from 'node:string_decoder';
@@ -52,10 +53,22 @@ export interface StreamResult {
   finalTextTail?: string;
 }
 
+// The token counts of a run (AC-8, A2): for each distinct assistant message (by `message.id`) the host's own usage numbers, summed over the messages. All four
+// are 0 when the stream carried no usage.
+export interface StreamUsage {
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+}
+
 export interface ParsedStream {
   init?: StreamInit;
+  usage: StreamUsage;
   permissionDenied: StreamPermissionDenial[];
   result?: StreamResult;
+  // Tool calls the assistant made, counted by tool name (at most MAX_LIST names; the rest are counted under OTHER_TOOLS).
+  toolUses: Record<string, number>;
   // How many result events were printed (the last one is kept).
   resultCount: number;
   // Non-empty lines that were not a JSON object, or were above the line limit.
@@ -72,6 +85,8 @@ export interface StreamJsonOptions {
 const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024;
 const MAX_NAME_CHARS = 128;
 const MAX_LIST = 64;
+// The name the tool uses beyond MAX_LIST distinct names are counted under.
+export const OTHER_TOOLS = '(other)';
 // How much of the final result text is kept: enough for a question and its numbered choices, not a transcript.
 export const FINAL_TEXT_TAIL_CHARS = 2000;
 
@@ -123,6 +138,11 @@ export class StreamJsonParser {
   #init: StreamInit | undefined;
   #permissionDenied: StreamPermissionDenial[] = [];
   #result: StreamResult | undefined;
+  #toolUses = new Map<string, number>();
+  // The last usage printed under each assistant message id: the host prints one event per content block, and the later one carries the final output count.
+  // A message with no id is its own entry, keyed by arrival order.
+  #usage = new Map<string, StreamUsage>();
+  #anonymousMessages = 0;
   #resultCount = 0;
   #malformed = 0;
   #events = 0;
@@ -143,8 +163,10 @@ export class StreamJsonParser {
     this.#pending = '';
     return {
       ...(this.#init !== undefined ? { init: this.#init } : {}),
+      usage: this.#usageTotal(),
       permissionDenied: [...this.#permissionDenied],
       ...(this.#result !== undefined ? { result: this.#result } : {}),
+      toolUses: Object.fromEntries([...this.#toolUses].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
       resultCount: this.#resultCount,
       malformedLines: this.#malformed,
       eventCount: this.#events,
@@ -203,6 +225,47 @@ export class StreamJsonParser {
     if (type === 'system' && subtype === 'init') this.#onInit(value);
     else if (type === 'system' && subtype === 'permission_denied') this.#onDenied(value);
     else if (type === 'result') this.#onResult(value);
+    else if (type === 'assistant') this.#onAssistant(value);
+  }
+
+  // Counts the `tool_use` blocks of an assistant message by tool name; the input and the text of the message are not read.
+  #usageTotal(): StreamUsage {
+    const total: StreamUsage = { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+    for (const usage of this.#usage.values()) {
+      total.inputTokens += usage.inputTokens;
+      total.cacheCreationTokens += usage.cacheCreationTokens;
+      total.cacheReadTokens += usage.cacheReadTokens;
+      total.outputTokens += usage.outputTokens;
+    }
+    return total;
+  }
+
+  // Keeps the usage of an assistant message under its id (the later event of the same id replaces the earlier). Only the four counts are read.
+  #onUsage(message: unknown): void {
+    if (!isObject(message) || !isObject(message['usage'])) return;
+    const usage = message['usage'];
+    const id = text(message['id']);
+    const key = id ?? `(no id ${(this.#anonymousMessages += 1)})`;
+    this.#usage.set(key, {
+      inputTokens: count(usage['input_tokens']),
+      cacheCreationTokens: count(usage['cache_creation_input_tokens']),
+      cacheReadTokens: count(usage['cache_read_input_tokens']),
+      outputTokens: count(usage['output_tokens']),
+    });
+  }
+
+  #onAssistant(event: Json): void {
+    const message = event['message'];
+    this.#onUsage(message);
+    const content = isObject(message) ? message['content'] : undefined;
+    if (!Array.isArray(content)) return;
+    for (const block of content) {
+      if (!isObject(block) || block['type'] !== 'tool_use') continue;
+      const name = text(block['name']);
+      if (name === undefined) continue;
+      const key = this.#toolUses.has(name) || this.#toolUses.size < MAX_LIST ? name : OTHER_TOOLS;
+      this.#toolUses.set(key, (this.#toolUses.get(key) ?? 0) + 1);
+    }
   }
 
   #onInit(event: Json): void {

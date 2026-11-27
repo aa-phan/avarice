@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { sha256Hex } from '../../src/domain/digest.ts';
-import { CORPUS_LIMITS, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../src/domain/knowledge-corpus.ts';
+import { CORPUS_LIMITS, changedDocuments, corpusSummary, knowledgeCandidates, selectKnowledgeCorpus } from '../../src/domain/knowledge-corpus.ts';
 import type { KnowledgeManifest } from '../../src/domain/knowledge-corpus.ts';
 import { fileSizes, materializeCorpus, readExtractionFiles, writeExtractionPlan } from '../../src/adapters/graph/knowledge-corpus.ts';
 import { CHUNK_LIMITS, planExtractionChunks } from '../../src/domain/knowledge-extraction.ts';
@@ -55,32 +55,46 @@ describe('selectKnowledgeCorpus (ONB-14, S-45 corpus rule)', () => {
     '.env.example',
     'src/index.ts',
   ];
-  const sizes: Record<string, number> = { ...Object.fromEntries(MAP.map((p) => [p, 1000])), '.planning/PROJECT.md': 200, 'docs/decisions/ADR-001-storage.md': 300, 'docs/guide.md': 400, 'docs/big.md': 300 * 1024 };
+  const sizes: Record<string, number> = {
+    ...Object.fromEntries(MAP.map((p) => [p, 1000])),
+    '.planning/PROJECT.md': 200,
+    '.planning/STATE.md': 120,
+    '.planning/phases/01-x/01-01-PLAN.md': 150,
+    'docs/decisions/ADR-001-storage.md': 300,
+    'docs/guide.md': 400,
+    'docs/big.md': 300 * 1024,
+  };
 
-  it('takes the map, PROJECT.md, the ADR and the documents; leaves STATE.md, the phase plan, the oversized file and .env.example out', () => {
+  it('takes the map, PROJECT.md, the ADR, the documents, STATE.md and the phase plans (plan 04-17, ONB-15); leaves the oversized file, .env.example and source out', () => {
     const picked = selectKnowledgeCorpus({ trackedPaths: tracked, sizes, mapFiles: MAP, adrDirs: ['docs/decisions'], documentGlobs: DEFAULT_GLOBS, secretGlobs: SECRET_GLOBS });
-    assert.deepEqual(picked.paths, [...MAP, '.planning/PROJECT.md', 'docs/decisions/ADR-001-storage.md', 'docs/guide.md'].sort());
+    assert.deepEqual(picked.paths, [...MAP, '.planning/PROJECT.md', '.planning/STATE.md', '.planning/phases/01-x/01-01-PLAN.md', 'docs/decisions/ADR-001-storage.md', 'docs/guide.md'].sort());
     assert.deepEqual(picked.dropped, [{ path: 'docs/big.md', reason: 'too-large' }]);
-    for (const absent of ['.planning/STATE.md', '.planning/phases/01-x/01-01-PLAN.md', 'docs/big.md', '.env.example', 'src/index.ts']) {
+    for (const absent of ['docs/big.md', '.env.example', 'src/index.ts']) {
       assert.equal(picked.paths.includes(absent), false, `${absent} is not in the corpus`);
     }
   });
 
-  it('refuses a phase file and STATE.md even when a document glob names them, and says why', () => {
+  it('takes a phase file that is a Markdown document and no other file of a phase directory', () => {
     const picked = selectKnowledgeCorpus({
-      trackedPaths: tracked,
-      sizes: { ...sizes, '.planning/STATE.md': 10, '.planning/phases/01-x/01-01-PLAN.md': 10 },
+      trackedPaths: ['.planning/phases/02-y/02-01-PLAN.md', '.planning/phases/02-y/02-01-SUMMARY.md', '.planning/phases/02-y/contrast-check.mjs', '.planning/phases/02-y/fixtures.json'],
+      sizes: { '.planning/phases/02-y/02-01-PLAN.md': 10, '.planning/phases/02-y/02-01-SUMMARY.md': 10, '.planning/phases/02-y/contrast-check.mjs': 10, '.planning/phases/02-y/fixtures.json': 10 },
       mapFiles: [],
       adrDirs: [],
-      documentGlobs: ['**/*.md'],
+      documentGlobs: [],
       secretGlobs: SECRET_GLOBS,
     });
-    assert.equal(picked.paths.includes('.planning/STATE.md'), false);
-    assert.equal(picked.paths.includes('.planning/phases/01-x/01-01-PLAN.md'), false);
-    assert.deepEqual(picked.dropped.filter((d) => d.reason === 'phase-file' || d.reason === 'state-file').map((d) => `${d.path}:${d.reason}`).sort(), [
-      '.planning/STATE.md:state-file',
-      '.planning/phases/01-x/01-01-PLAN.md:phase-file',
-    ]);
+    assert.deepEqual(picked.paths, ['.planning/phases/02-y/02-01-PLAN.md', '.planning/phases/02-y/02-01-SUMMARY.md']);
+    assert.deepEqual(picked.dropped, []);
+  });
+
+  it('holds a planning file only inside the contract\'s read set and outside its secret globs, and says why it left one out', () => {
+    const base = { trackedPaths: tracked, sizes, mapFiles: [], adrDirs: [], documentGlobs: [] };
+    const narrowed = selectKnowledgeCorpus({ ...base, secretGlobs: SECRET_GLOBS, readGlobs: ['docs/**', '.planning/PROJECT.md'] });
+    assert.deepEqual(narrowed.paths, ['.planning/PROJECT.md']);
+    assert.deepEqual(narrowed.dropped.map((d) => `${d.path}:${d.reason}`).sort(), ['.planning/STATE.md:outside-read', '.planning/phases/01-x/01-01-PLAN.md:outside-read']);
+    const secret = selectKnowledgeCorpus({ ...base, secretGlobs: ['.planning/STATE.md'] });
+    assert.deepEqual(secret.dropped, [{ path: '.planning/STATE.md', reason: 'secret-path' }]);
+    assert.equal(secret.paths.includes('.planning/phases/01-x/01-01-PLAN.md'), true);
   });
 
   it('drops a secret-bearing path, an oversized file and a file that is not there, each with its reason', () => {
@@ -302,5 +316,24 @@ describe('the extraction plan and output (decision B, adapter side)', () => {
     const viaFile = readExtractionFiles(staging, made);
     assert.ok(viaFile.ok);
     assert.deepEqual(viaFile.value, { 1: { problem: 'missing' } });
+  });
+});
+
+describe('changedDocuments (plan 04-17, ONB-15, S-47)', () => {
+  const entry = (sourcePath: string, sha256: string, revision = `git:${PIN}`) => ({ copyPath: `.avarice-knowledge/${sourcePath}`, sourcePath, revision, sha256 });
+  const manifest = (entries: ReturnType<typeof entry>[], revision = `git:${PIN}`): KnowledgeManifest => ({ schema: 1, revision, entries, excluded: [] });
+
+  it('reports the new and the changed documents by content digest, in the order of the current manifest, and nothing else', () => {
+    const previous = manifest([entry('docs/a.md', '1'.repeat(64)), entry('docs/b.md', '2'.repeat(64)), entry('docs/gone.md', '3'.repeat(64))]);
+    const current = manifest([entry('docs/b.md', '2'.repeat(64)), entry('docs/a.md', '9'.repeat(64)), entry('docs/new.md', '4'.repeat(64))]);
+    assert.deepEqual(changedDocuments(previous, current).map((e) => e.sourcePath), ['docs/a.md', 'docs/new.md']);
+  });
+
+  it('treats a document with the same digest as unchanged although its revision moved, and an empty previous manifest as everything new', () => {
+    const previous = manifest([entry('docs/a.md', '1'.repeat(64), `git:${'b'.repeat(40)}`)], `git:${'b'.repeat(40)}`);
+    const current = manifest([entry('docs/a.md', '1'.repeat(64)), entry('docs/b.md', '2'.repeat(64))]);
+    assert.deepEqual(changedDocuments(previous, current).map((e) => e.sourcePath), ['docs/b.md']);
+    assert.deepEqual(changedDocuments(manifest([]), current).map((e) => e.sourcePath), ['docs/a.md', 'docs/b.md']);
+    assert.deepEqual(changedDocuments(current, current), []);
   });
 });

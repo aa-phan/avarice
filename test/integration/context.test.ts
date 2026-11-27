@@ -25,7 +25,7 @@ import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
 import { FakeIntelHost } from '../helpers/fake-intel-host.ts';
 import type { FakeIntelOptions } from '../helpers/fake-intel-host.ts';
 import { writeFakeGraphify } from '../helpers/fake-graphify.ts';
-import { INJECTION, mixedTiersGraph } from '../fixtures/index-fixtures.ts';
+import { INJECTION, intelDocuments, mixedTiersGraph } from '../fixtures/index-fixtures.ts';
 
 const REPO_FILES = {
   'README.md': '# scratch\n',
@@ -323,10 +323,63 @@ describe('document text stays data (S-46 output half, T-01-49)', () => {
       if (l.includes(INJECTION)) assert.ok(i > at && i < end, `line ${i} holds the injected text outside the fence: ${l}`);
     });
     assert.match(lines[at - 2] ?? '', /\(untrusted graph-node, fenced below\)/, 'the heading does not repeat the node text');
-    // Code nodes are not fenced.
-    assert.match(ran.out, /\[gsd-graph\] ledger\n/);
+    // A code node whose excerpt names a document or concept neighbour by ID is fenced as well, not printed by its title (WR-18): in this graph every node is, so
+    // the three code nodes (ledger, postEntry, formatAmount) are fenced like the document and the two concepts. A code node that names only code nodes stays
+    // unfenced (asserted on the adapter in context-adapters.test.ts).
+    assert.doesNotMatch(ran.out, /\[gsd-graph\] ledger\n/);
+    assert.equal(lines.filter((l) => l.includes('[gsd-graph] (untrusted graph-node, fenced below)')).length, 6);
 
     assert.equal(fingerprint(), before, 'the command wrote nothing: ledger rows, contract digests, data root, staging and checkout are unchanged');
+  });
+
+  // The lines of the output between the fence opened for `scope` and the one that closes it; the text of `INJECTION` must lie inside.
+  function assertInjectionOnlyFenced(out: string, scope: string): void {
+    const lines = out.split('\n');
+    const at = lines.findIndex((l) => l.includes(`begin untrusted data from ${scope} at git:`));
+    assert.ok(at > 0, `a fence opens for ${scope}`);
+    const end = lines.findIndex((l, i) => i > at && l.includes(`end untrusted data from ${scope} at git:`));
+    assert.ok(end > at, 'and closes');
+    assert.ok(lines.slice(at + 1, end).some((l) => l.includes(INJECTION)), 'the injected sentence is inside the fence');
+    lines.forEach((l, i) => {
+      if (l.includes(INJECTION)) assert.ok(i > at && i < end, `line ${i} holds the injected text outside the fence: ${l}`);
+    });
+  }
+
+  it('fences the excerpt of a code node whose description carries instruction text (WR-18)', async () => {
+    const o = await onboard({ graphifyBin: fakeGraphifyBin() });
+    installGraph(o, {
+      directed: false,
+      multigraph: false,
+      built_at_commit: o.repo.head,
+      nodes: [
+        { id: 'n1', label: 'ledger', file_type: 'code', source_file: 'src/index.ts', description: INJECTION },
+        { id: 'n2', label: 'postEntry', file_type: 'code', source_file: 'src/index.ts' },
+      ],
+      links: [{ source: 'n1', target: 'n2', relation: 'calls', confidence: 'EXTRACTED', confidence_score: 1 }],
+    });
+    const json = await contextJson(o, ['ledger', '--budget', '100000']);
+    const described = json.items.find((i) => i.ref.id === 'n1');
+    assert.ok(described, 'the described code node answers');
+    assert.equal(described.untrusted, true, 'it is marked untrusted');
+    assert.ok(described.excerpt.includes(INJECTION), 'the description reaches its excerpt');
+    const ran = await context(o, ['ledger', '--budget', '100000']);
+    assert.equal(ran.code, 0, ran.err);
+    assertInjectionOnlyFenced(ran.out, 'src/index.ts');
+  });
+
+  it('fences a gsd-intel excerpt that says "ignore your contract" (WR-19)', async () => {
+    const o = await onboard({ graphifyBin: fakeGraphifyBin() });
+    const intelPath = join(o.staging, '.planning', 'intel', 'arch-decisions.json');
+    const arch = intelDocuments()['arch-decisions.json'] as { entries: Record<string, unknown> };
+    arch.entries['ledger-policy'] = { description: INJECTION };
+    writeFileSync(intelPath, `${JSON.stringify(arch, null, 2)}\n`);
+    const json = await contextJson(o, ['ledger-policy', '--budget', '100000']);
+    const entries = json.items.filter((i) => i.source === 'gsd-intel');
+    assert.ok(entries.length > 0, 'the intel entry answers');
+    assert.ok(entries.every((i) => i.untrusted === true), 'every intel item is marked untrusted');
+    const ran = await context(o, ['ledger-policy', '--budget', '100000']);
+    assert.equal(ran.code, 0, ran.err);
+    assertInjectionOnlyFenced(ran.out, '.planning/intel/arch-decisions.json');
   });
 
   it('cannot close the fence from inside, and never prints a control character', async () => {

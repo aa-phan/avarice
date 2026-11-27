@@ -364,6 +364,22 @@ describe('completeRunInvocation: settle, record, correlate', () => {
     });
   });
 
+  it('carries the sum of the four usage counts as tokens on invocation.finished, and no tokens when the host reported none', () => {
+    withUnit((u) => {
+      const { prepared } = launched(u);
+      const usage = { inputTokens: 13, cacheCreationTokens: 100, cacheReadTokens: 3000, outputTokens: 60 };
+      assert.ok(completeRunInvocation(u.deps, prepared, ok(outcomeOf({ details: details(usage) }))).ok);
+      const data = eventsOf(u, 'invocation.finished')[0]?.data as Record<string, unknown>;
+      assert.equal(data['tokens'], 3173);
+    });
+    withUnit((u) => {
+      const { prepared } = launched(u);
+      assert.ok(completeRunInvocation(u.deps, prepared, ok(outcomeOf())).ok);
+      const data = eventsOf(u, 'invocation.finished')[0]?.data as Record<string, unknown>;
+      assert.equal('tokens' in data, false);
+    });
+  });
+
   it('charges a killed invocation the larger of what it reported and its reservation (never a refund)', () => {
     withUnit((u) => {
       const { prepared } = launched(u);

@@ -134,7 +134,7 @@ const GUARDED_PROJECT: PrepareRunUnitOptions = {
     [GUARDED_FILE]: '{"mode":"production"}\n',
     Makefile: 'write:\n\techo x >> config/app.json\n',
     'scripts/write-config.mjs': "import { appendFileSync } from 'node:fs';\nappendFileSync('config/app.json', 'x');\n",
-    'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node scripts/write-config.mjs && node --test test/"\n  }\n}\n',
+    'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node scripts/write-config.mjs && node --test \\"test/**/*.test.ts\\""\n  }\n}\n',
   },
   setup: (repo) => {
     symlinkSync('../config', join(repo.path, 'src', 'link'));
@@ -356,7 +356,7 @@ const PROBE_PROJECT: PrepareRunUnitOptions = {
   ...GUARDED_PROJECT,
   files: {
     ...GUARDED_PROJECT.files,
-    'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node ../scratch/probe.mjs && node --test test/"\n  }\n}\n',
+    'package.json': '{\n  "name": "slugger",\n  "version": "1.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "test": "node ../scratch/probe.mjs && node --test \\"test/**/*.test.ts\\""\n  }\n}\n',
   },
 };
 

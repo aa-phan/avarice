@@ -1,41 +1,43 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.0
-status: "Phase 3 shipped — PR #4"
-stopped_at: Milestone v1.0 complete, ready to start v1.1
-last_updated: "2026-11-16T00:05:55.508Z"
-last_activity: 2026-11-15
-state_head: eb680ba6c4d620b1b8fda7fb14fddd2696978683
+milestone: v1.1
+milestone_name: MVP Completion
+current_phase: 5
+current_phase_name: Delivery, test strength, review feedback and data safety
+status: planning
+stopped_at: Phase 04 complete, ready to plan Phase 5
+last_updated: "2026-11-26T00:41:50.402Z"
+last_activity: 2026-11-25
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: 10da5e65ebfaf7b19d0c3a592219cd3c9117ef36
 progress:
-  total_phases: 8
-  completed_phases: 3
-  total_plans: 134
-  completed_plans: 134
-milestone_name: Contained Kernel
-current_phase: 4
-current_phase_name: Profiles, retrieval budgets, restricted mode and the portability proof
+  total_phases: 6
+  completed_phases: 4
+  total_plans: 70
+  completed_plans: 70
+  percent: 44
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-15)
+See: .planning/PROJECT.md (updated 2026-11-25)
 
 **Core value:** Set a goal and the boundaries, leave the desk, and come back to a verified, reviewable change or a short list of genuine blocking decisions, with containment that does not depend on the model behaving.
-**Current focus:** Milestone v1.0 shipped 2026-11-15; next is v1.1 MVP Completion (Phase 4). Phase 9 (v1.0 tech-debt cleanup) runs after the last implemented phase.
+**Current focus:** Phase 5 — Delivery, test strength, review feedback and data safety
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
-Plan: —
-Status: Phase 3 shipped — PR #4
-Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
+Phase: 5 — Delivery, test strength, review feedback and data safety
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-25 — Phase 04 complete, transitioned to Phase 5
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 134
+- Total plans completed: 204
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -46,6 +48,7 @@ Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
 | 01 | 26 | - | - |
 | 02 | 35 | - | - |
 | 03 | 73 | - | - |
+| 04 | 70 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -162,6 +165,75 @@ Last activity: 2026-11-15 — Phase 3 and the v1.0 close shipped as PR #4
 | Phase 03 P59 | one live attempt, 19.5 min run | 3 tasks | 2 files |
 | Phase 03 P31 | 2h | 3 tasks | 8 files |
 | Phase 03 P32 | 15 min | 3 tasks | 8 files |
+| Phase 04 P01 | 14 min | 2 tasks | 4 files |
+| Phase 04 P02 | 25 min | 3 tasks | 5 files |
+| Phase 04 P04 | 25 min | 3 tasks | 16 files |
+| Phase 04 P03 | n/a | 3 tasks | 4 files |
+| Phase 04 P05 | 12min | 3 tasks | 11 files |
+| Phase 04 P06 | 21min | 3 tasks | 15 files |
+| Phase 04 P07 | 60 min | 2 tasks | 8 files |
+| Phase 04 P08 | 36 min | 3 tasks | 14 files |
+| Phase 04 P09 | 30 min | 2 tasks | 7 files |
+| Phase 04 P10 | 35min | 3 tasks | 21 files |
+| Phase 04 P11 | 35 min | 3 tasks | 11 files |
+| Phase 04 P12 | 35 min | 3 tasks | 26 files |
+| Phase 04 P13 | 40 min | 2 tasks | 6 files |
+| Phase 04 P14 | 65min | 3 tasks | 23 files |
+| Phase 04 P15 | 9 min | 3 tasks | 13 files |
+| Phase 04 P16 | 85 min | 3 tasks | 16 files |
+| Phase 04 P17 | 70min | 3 tasks | 17 files |
+| Phase 04 P18 | 30 min | 3 tasks | 14 files |
+| Phase 04 P19 | 60 min | 3 tasks | 15 files |
+| Phase 04 P20 | 35 min | 3 tasks | 18 files |
+| Phase 04 P21 | 20 min | 3 tasks | 22 files |
+| Phase 04 P22 | 35min | 2 tasks | 10 files |
+| Phase 04 P23 | 28 min | 3 tasks | 27 files |
+| Phase 04 P24 | 24 min | 2 tasks | 21 files |
+| Phase 04 P25 | 21 min | 3 tasks | 20 files |
+| Phase 04 P26 | 45min | 3 tasks | 17 files |
+| Phase 04 P27 | 55 min | 3 tasks | 17 files |
+| Phase 04 P28 | 40 min | 3 tasks | 26 files |
+| Phase 04 P29 | 25min | 2 tasks | 7 files |
+| Phase 04 P30 | 110 min | 3 tasks | 25 files |
+| Phase 04 P31 | 45 min | 3 tasks | 14 files |
+| Phase 04 P32 | 9 min | 3 tasks | 21 files |
+| Phase 04 P33 | 40min | 3 tasks | 11 files |
+| Phase 04 P34 | 3 sessions | 3 tasks | 30 files |
+| Phase 04 P35 | 16h 19m | 3 tasks | 28 files |
+| Phase 04 P36 | 5h 44m (continuation) | 3 tasks | 3 files |
+| Phase 04 P37 | 90 min | 3 tasks | 10 files |
+| Phase 04 P38 | not captured | 3 tasks | 15 files |
+| Phase 04 P39 | not captured | 3 tasks | 39 files |
+| Phase 04 P40 | not captured | 3 tasks | 9 files |
+| Phase 04 P41 | not captured | 3 tasks | 12 files |
+| Phase 04 P42 | 75 min | 3 tasks | 14 files |
+| Phase 04 P43 | 7 min | 3 tasks | 11 files |
+| Phase 04 P44 | 13min | 3 tasks | 10 files |
+| Phase 04 P45 | 33 min | 3 tasks | 13 files |
+| Phase 04 P46 | 11 min | 3 tasks | 8 files |
+| Phase 04 P47 | 20 min | 3 tasks | 10 files |
+| Phase 04 P48 | not captured | 2 tasks | 5 files |
+| Phase 04 P49 | not captured | 2 tasks | 7 files |
+| Phase 04 P51 | 19 min | 3 tasks | 10 files |
+| Phase 04 P55 | 9 min | 2 tasks | 5 files |
+| Phase 04 P52 | not captured | 2 tasks | 4 files |
+| Phase 04 P53 | 13 min | 3 tasks | 14 files |
+| Phase 04 P50 | 8h (waited on owner decision) | 2 tasks | 8 files |
+| Phase 04 P54 | 3 sessions (2026-11-22 to 2026-11-23) | 2 tasks | 36 files |
+| Phase 04 P56 | 55 min | 2 tasks | 7 files |
+| Phase 04 P58 | 14 min | 2 tasks | 6 files |
+| Phase 04 P59 | 77 min | 3 tasks | 9 files |
+| Phase 04 P60 | 25 min | 2 tasks | 7 files |
+| Phase 04 P61 | 7 min | 3 tasks | 2 files |
+| Phase 04 P57 | 7 min | 3 tasks | 5 files |
+| Phase 04 P64 | 10 min | 3 tasks | 4 files |
+| Phase 04 P62 | 20 min | 2 tasks | 6 files |
+| Phase 04 P65 | 12 min | 2 tasks | 4 files |
+| Phase 04 P63 | 35 min | 2 tasks | 5 files |
+| Phase 04 P66 | 137 min | 3 tasks | 11 files |
+| Phase 04 P67 | 35 min | 2 tasks | 6 files |
+| Phase 04 P68 | 40 min | 2 tasks | 6 files |
+| Phase 04 P69 | multi-session | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -385,6 +457,126 @@ Full log in PROJECT.md Key Decisions. All 12 ADRs are Proposed; none is locked.
 - [Phase 03]: 03-60: the exit verdict is 3/3 ready_for_review over the D-26 epoch (run 2 attempt 4, run 3 attempt 3, run 1 attempt 1); LIVE-CASES.md keeps the heading Exit (plans 03-57 to 03-68) and lists every attempt under it
 - [Phase 03]: 03-31: the subsystem document is named autonomy-and-decisions.md and written whole in the tracer task; run-wide blocks other than reason decision are final in practice (pickup reads only reason decision), recorded as a finding for 03-33
 - [Phase 03]: 03-32: the terminal identity rule has one home, the owner commands section of containment.md; every command section links to it
+- [Phase 04]: 04-01: CURRENT_SPEND_PHASE = 4; Phase 4 live spend is capped at 40 USD (D-03) by a lower-only guard, ledger test/containment/live-spend-phase4.jsonl
+- [Phase 04]: 04-02: plan 04-17 uses full code-only extraction plus a node-level diff; a path-subset merge by node ID loses edges that leave the extracted set
+- [Phase 04]: 04-02: uses relation mapped id-only; Claude Code 2.1.325 is not admitted and needs a live T3 run in 04-11
+- [Phase 04]: 04-04: a repository binding matches only when both the realpath git root and the root commit equal the recorded pair; repo add binds only when --profile is given — A pair is what the plan keys the registry by; a clone at another path is caught by the enterprise remote patterns, and an unflagged add must never lock a repository to a profile.
+- [Phase 04]: 04-04: an untrusted bindings file or enterprise config (link, not regular, over 64 KiB, bad JSON, bad entry) refuses the command; git is not run while no binding and no remotePatterns exist — A skipped entry would let a bound repository open under another profile; skipping git keeps users of no profile feature at zero cost.
+- [Phase 04]: Policy evaluation order: fixed SEC-5 rule, broken rank 1 (deny every privileged action), organization-stated rule, built-in rule (replaceable by a personal user rule), then ranks 3 and 4 only restrict; the repository never loosens — D-17 and SEC-4; the organization file is the only source that can loosen a built-in default under an enterprise profile
+- [Phase 04]: PolicySources.organization left out means no organization policy applies; 'absent' means a file was expected and is missing (denies privileged actions under an enterprise profile); an error result denies under any profile — Callers (profile config reader, later plan) must choose between them; fail closed when a file is expected
+- [Phase 04]: SEC-5 made concrete as built-in fixed deny rules sec5.tls, sec5.authentication, sec5.egress on three privileged net.* actions; ids prefixed builtin. or sec5., and org.invalid-or-missing, are reserved in every policy file — The plan exempts SEC-5 from personal loosening but named no rule to exempt
+- [Phase 04]: 04-06: run.unit requires agent-host contained-invocation (not resume, which the production Claude host publishes false); a G0 capability failure blocks with enforcement_failure
+- [Phase 04]: 04-06: enforcement map has 18 rows; rows for controls built later are unverified 'proved by plan 04-NN'; host limitation 3 and 4 rows are not-claimed
+- [Phase 04]: Redaction runs inside appendEventRow; overlapping seeded literals merge into one [REDACTED:seeded] marker; a seeded literal under 8 characters is refused
+- [Phase 04]: Plan 04-08: schema and profile are optional in config.json; when present schema must be 1 and profile the selected profile, an unknown key is refused by name
+- [Phase 04]: Plan 04-08: meta.profile_id is asserted right after the store opens and before migration, so a store of another profile is not migrated or backed up (exit 70)
+- [Phase 04]: Plan 04-08: migration 0004 adds no profile column; per-store meta.profile_id is the D-18 scoping, and approvals become append-only except consumed_at and revoked_at once
+- [Phase 04]: Plan 04-08: the first non-read-only command binds every project of the store to its profile; a project bound to another profile fails composition (exit 70), a project whose path is gone is skipped
+- [Phase 04]: Plan 04-08: deps.policy() reads policy.organizationFile for enterprise profiles only; absent or missing means organization absent (privileged denied); the rest of the policy section is the user source
+- [Phase 04]: 04-09: intel keeps its half-budget cap inside the first-fit pick; an intel handle above half the budget is never read — Existing FR-20 cap test holds; S-54 numbers tested with the 3,000 handle in the graph. Owner review: cap could bind only when the graph competes
+- [Phase 04]: 04-09: a containment edge seen from the child is one-hop; handle readRule uses that effective rule — Plan did not say how to read an edge from its target side; descendants follow downward only
+- [Phase 04]: 04-10: preflight_json is immutable and precedes staging, so it records the class, the no-drift outcome and drift null; the final existing-map outcome and GSD's drift verdict are in the mapping:plan step and the project record existingState
+- [Phase 04]: 04-10: a drift verdict that is skipped, unreadable or a failed run maps in full in staging; only GSD's own drift pass adopts a stamped map (T-04-26)
+- [Phase 04]: 04-10: files.delete is the map directory when the existing-map answer is Refresh and a map exists (the preset answer is always Refresh); an adopted map is validated on stamp presence, not equality with the staging HEAD
+- [Phase 04]: Host admission by patch range: a 2.1 patch at or above 2.1.312 is admitted as unverified-patch after the flag, sandbox and hook probes pass; other minors refuse (ADR-014, D-20)
+- [Phase 04]: 04-12: supervisor child selects its profile from AVARICE_PROFILE alone; supervisorEnv and the launchd plist carry it (plist value checked as a profile name); schedule accepts --profile
+- [Phase 04]: 04-12: knownProfileRoots fails closed on an unlistable profiles directory (exit 70) and skips an unparsable, linked or relative-root config of another profile; otherRoots holds this and the default config home
+- [Phase 04]: 04-13: status reads every per-run table through Ledger.loadRunStatusInputs in bound IN chunks of 500 runs; measured 1,000-run status p95 192-212 ms — Statement count no longer grows with runs up to 500 per chunk; output byte-identical
+- [Phase 04]: 04-14: planRefresh replaces 04-10's refreshScope; the refresh plan is incremental, paths or full, and exactly 3 new top-level directories (integers, >=) plan full
+- [Phase 04]: 04-14: an incremental refresh is mapping mode adopt (provenance adopted) and a map held only in the artifact store is not restored into staging, so such a refresh plans full (owner review)
+- [Phase 04]: 04-14: onboard refreshes an active project; repo add still refuses it (PreflightRequest.refresh)
+- [Phase 04]: [04-15] Credential provider allow-list per profile: personal-local keychain and cmd, personal-extended adds delegated, enterprise keychain and cmd; env in none (PROVIDERS_BY_CLASS, owner review) — Plan 04-15 flagged assumption reading D-17; ADR-009 decision 2 refuses env in every profile
+- [Phase 04]: [04-15] A credential.resolve event that cannot be recorded withholds the credential; a credentials section that does not parse (env: reference) fails every non-read-only command with exit 70 (owner review) — S-48 audit of every attempt; S-49 no run starts with an env reference
+- [Phase 04]: 04-16: authorizeAction order is policy deny, class allow, contract naming the same action and canonical digest, single-use approval consumed in the action.started transaction, else approval-required:<apr id>; a contract never overrides a policy deny — FR-12, D-15, T-04-41, T-04-42
+- [Phase 04]: 04-16: resume blocks a run with an unfinished privileged action on a withdraw-only permission decision using reason enforcement_failure, so no item continues beside it; the owner's exit is avarice cancel (needs owner review) — FR-15, T-04-44
+- [Phase 04]: 04-18: the transcript cap counts redacted bytes and cuts at a line boundary; a default invocation keeps a transcript-summary and the redacted transcript digest, the whole transcript only for retention.transcripts full or AVARICE_DEBUG_TRANSCRIPTS=1; RedactingArtifactStore redacts only listed text kinds (unlisted kinds stored as given, a source scan guards new kinds)
+- [Phase 04]: 04-19: the hook path (run and attended) does not enforce a policy rule's approvalSource and does not evaluate policy rules; an attended approval is any usable local-user row of the scope, action and digest — The hook stays lean (no application layer), so it asks no evaluatePolicy; in a run every privileged form is denied and nothing is consumed. Owner review: pass the evaluated policy to the hook or move the decision into a command it calls.
+- [Phase 04]: 04-19: gh api with a non-GET method (or fields with no method) is the privileged action scm.api.write, added to the action table; an approval binds option names, not values, and not the directory — No existing action fits an arbitrary SCM API write; binding names keeps a title or body out of the approval while --force stays in.
+- [Phase 04]: 04-20: a reference block (ref_changed, ref_deleted, access_revoked) opens one withdraw-only decision and leaves work items and attempts untouched; the owner's only way out is avarice cancel until an accept-or-rebuild command exists
+- [Phase 04]: 04-20: a task reference keeps the revision the run was built from; a refresh changes freshness only, so a changed reference is found changed again on every resume
+- [Phase 04]: 04-20: ContextSource.refresh takes the project's index query as a second argument; block precedence is access_revoked, ref_deleted, ref_changed
+- [Phase 04]: 04-21: an onboarding's permission decisions are decisions rows on its carrier run (openOnboardingDecision), not shown by inbox and not answerable by decide — no run method can see the carrier; owner review item
+- [Phase 04]: 04-21: a refused, denied or failed promotion leaves the onboarding active (exit 0) and is recorded as step promote; a promotion that never started is not retried on resume — promotion runs after activation in the same lease; owner review items 2 and 3
+- [Phase 04]: 04-22: a brief that holds a secret is redacted (AppDeps.redact before parseBrief), not refused; owner may prefer refusing
+- [Phase 04]: 04-22: hook_reads keyed by redacted path plus 16 hex of SHA-256 of the path; the hook process cannot redact a seeded credential value (owner review)
+- [Phase 04]: 04-22: AC-6 denies personal-local's profile config by contents (file-read-data); the registry reads other profiles' config.json on every command (D-19), a read the count cannot see (owner review)
+- [Phase 04]: 04-23: the restricted host is its own AppDeps member and a run's mode is read from its stored contract, so supervise and resume continue a restricted run restricted — supervise and resume are separate processes with no flag; a createDeps flag could not reach them
+- [Phase 04]: 04-23: a restricted run ends with the existing enforcement block (permission decision, withdraw only); owner review wanted on cancel/keep-open options — decision policy gives a permission decision one withdraw option, which applies nothing
+- [Phase 04]: 04-24: a restricted onboarding builds the code graph only; intel and knowledge are recorded absent (reason restricted), and the restricted onboarding line adds the generated --plugin-dir and --agents pair
+- [Phase 04]: 04-24: onboard --restricted replaces an active contained record with a partial (restricted) version, and contained starts on a restricted record are refused (owner review: whether to forbid the downgrade)
+- [Phase 04]: 04-25: doctor composes its own read-only dependency set (composeDoctor, not createDeps); absent host or GSD and refused host are warnings, an incompatible GSD, a newer store, an env: credential reference and an incompatible active record are errors (exit 3)
+- [Phase 04]: 04-25: S-38 record incompatibility is derived by recordCompatibility (no admitted gsd-core, outside 1.17.x, or another minor), shared by doctor and start; start refuses with record-incompatible and never writes the record
+- [Phase 04]: 04-26: git-files searches committed objects at HEAD inside the read scope (default: all tracked paths minus .git and the secret globs); snippets are 40 lines and 1500 characters around the hit — T-04-71 and T-04-72: the term is data and a hit outside the scope is never returned; uncommitted or untracked text cannot answer
+- [Phase 04]: 04-26: a stale index item whose cited path is gone at HEAD keeps its place in the pack as confirmed false, its content withheld and a note naming it; gsd-planning sections are untrusted, skipped when the graph returned a document node, and fresh/stale by the state.json digest — Packs never carry text of a file that no longer exists; planning text is data, never a policy source (T-04-73)
+- [Phase 04]: 04-27: manual evidence is recorded inconclusive, external, on a manual:sha256 revision no gate judges, attached to the run's latest attempt (no attempt: exit 3)
+- [Phase 04]: 04-27: a manual excerpt is at most 16000 bytes and evidence at most 2 MiB, both strict UTF-8, because the redacting store cannot redact bytes it cannot decode
+- [Phase 04]: 04-27: context add is the recording form only when --file, --source or --run is given; otherwise context add <words> is still a search
+- [Phase 04]: 04-27: status gains an appended optional manualEvidence key; a resume leaves manual-context and github pull-request references as recorded
+- [Phase 04]: 04-28: retrieval counters are budget rows spent with the all-or-nothing Ledger.spendBudgets; broad discovery is authorized by brief frontmatter broadDiscovery true and happens once; every source find and page is one search; the 64 KiB returned-byte cap applies per source answer; a refused read leaves the ref out of the pack with reason access_revoked and is not recorded in task_refs; status keeps its five budgets
+- [Phase 04]: 04-29: hook retrieval rules are policy-gated; a multi-row charge is check-all-then-write-all in one transaction; a Glob whose pattern names every file counts as unfiltered for broad discovery
+- [Phase 04]: 04-30: limits.contextTokens is a pack ceiling; the run's effective pack budget is min(ceiling, floor((32 KiB prompt - contract bytes - fence bytes)/4)) and the context:pack step records both (D-13) — The unit prompt is capped at 32 KiB, so a 24,000-token pack cannot fit; recording both numbers says which bound applied.
+- [Phase 04]: 04-30: a bad limits section refuses start and context and is a doctor error, while the composition, checks and pack budget keep the defaults; the profile config may raise a limit (maxConcurrentChecks at most 2) and no run contract overrides it — A typo must never remove a bound; the plan's contract-may-only-lower rule had no contract field to land on (owner review).
+- [Phase 04]: 04-30: artifact quota refuses new blobs (counted lazily, approximate across processes), debug events past maxEventRows are refused and counted rather than pruned, pack reuse on retry is per handle from the stage pass's in-memory pack — No eviction until OPS-4 retention classes (Phase 5); the events table is insert-only; the ledger never stores excerpt text (S-41).
+- [Phase 04]: 04-31: an empty adapters.context list selects no source (arm A of the AC-8 evaluation has no pack); plan 04-26 had refused it — The owner-approved arm A is no AVARICE pack and no other product configuration removes the pack. Flagged for owner review.
+- [Phase 04]: 04-31: the full AC-8 evaluation projects 72.60 USD (cap bound) against the 40 USD Phase 4 ceiling; the pilot of 3 tasks projects 11.70 USD — Onboarding at each arm's own parent is 42.00 of the total; the owner chooses a lever (fewer tasks, shared A and B onboarding, arms B and C only, ceiling) before plan 04-36 runs the full evaluation.
+- [Phase 04]: 04-32: Capability keys are each port's method names plus the rules contentAddressed, handoff and allowlist; an overriding artifact store is always wrapped in the RedactingArtifactStore and not subject to the profile quota
+- [Phase 04]: 04-32: run.handoff, run.install and onboarding.stage are defined in STEP_REQUIREMENTS but not yet enforced at a call site (owner review)
+- [Phase 04]: 04-33: portability proof seeds are 3 and 14 (tracer 3), not 42: seed 42 shows no duplicate over an onboarding or across the run scenarios, because each process draws from the start of its seed's sequence — The plan's acceptance needs at least one drop and one duplicate per seed; the contract suite still runs seed 42
+- [Phase 04]: 04-33: OWNER REVIEW: the domain reuses invocationId across separate calls (gsd-tools.ts:91 gsd:<verb>, graphify.ts:122 graphify:<id>); a remote adapter deduplicating by id alone would merge two legitimate calls. The fake keys by id plus a digest of the call and the proof asserts one run per call; src untouched (AC-7) — Settle a per-call nonce or an acknowledgement-bounded dedup window before the Phase 7 remote executor
+- [Phase 04]: 04-34: stage the GSD specs a restricted fast map reads into the staging copy (read-only, removed when the host returns); no read grant on the restricted line
+- [Phase 04]: 04-35: the mapper is told never to write a value the validation secrets check reports and to describe the setting instead (owner ruling 4); the secrets gate is unchanged
+- [Phase 04]: 04-36: AC-8 over the 6 portfolio tasks fails on tokens (B 94.4 percent and C 88.5 percent of A tokens, bound 50 percent; success B and C 4 of 6, A 2 of 6) — Measured by portfolio-6, 18 of 18 runs, 0 judging errors; the owner ruled the 6-task set in writing (ruling 2)
+- [Phase 04]: 04-36: D-08 keeps the knowledge pass on; adapters.knowledgePass default unchanged (true) — Arm C shows no success gain over B (4 of 6 each) and costs fewer tokens than B (17557851 against 18715894), so the rule does not say off; recorded as ADR-015 by plan 04-37
+- [Phase 04]: 04-36: the portfolio-6 stop on T01 is classified as the brief (harness); briefFor states the required checks and rules end-to-end work out of scope — Kept evidence of a diagnostic run showed the unit finished the change and the verifier returned human_needed for the e2e bullet it could not verify; no change under src/
+- [Phase 04]: ADR-015: AC-8 failed on its 50 percent token bound (B 94.4, C 88.5 percent of A); the D-08 rule keeps the knowledge pass on, adapters.knowledgePass stays true — C ties B on success (4 of 6) and costs fewer run tokens, so the rule's second condition does not hold; the rule ignores setup cost (C onboarding 0.83 USD against 0.12 for B), recorded as a negative consequence for the owner
+- [Phase 04]: The four new subsystem documents are listed in README.md and coverage.md as drafted and never marked reviewed; policy is evaluated only by the approval gate, so the hook ignores organization rules (findings.md) — CLAUDE.md requires a new document to be listed when written; the fresh prose reviews belong to plan 04-39
+- [Phase 04]: Plan 04-38: counts outside the hook rule row are left to plan 04-39's recount; the worklist hand-off lists the new values
+- [Phase 04]: Plan 04-38: event kinds are counted as the kinds written through an event append (50), since the old counting pattern also matches action names
+- [Phase 04]: Group C documents (containment, data-model, integrations) closed unreviewed by the owner's ruling 'close drafted' after four failed rounds; coverage.md records them as changed after review
+- [Phase 04]: 04-40: classifyShellCommand answers PrivilegedCommand, null or { unparseable } so the 17th prefix word cannot read as not privileged — No exported classifier may answer not-privileged for a command it could not read (CR-01)
+- [Phase 04]: 04-40: the attended unparseable denial records policy.denied with rule privileged:unparseable and creates no approval request; a run keeps shell-syntax — Nothing is named that the owner could approve; run-mode rule names do not change
+- [Phase 04]: 04-41: a readExclude entry with a glob character keeps the entry and entry/** forms; only a plain name also matches at any depth — dropping the /** form would stop excluding below a one-level glob such as dist/*
+- [Phase 04]: 04-41: a graph neighbour that is not a known code node counts as foreign text under every read rule, so the code node's excerpt is untrusted — the non-id-only path prints a free-text fileType or an unknown node's ID, which would otherwise reach the pack unfenced
+- [Phase 04]: 04-42: the no-replay rule lives in the approval gate: authorizeAction denies interrupted-action-open for a second start with an open earlier start of the same action and parameter digest; action.finished names its start by startSeq (optional, legacy ends close the earliest open start)
+- [Phase 04]: 04-42: a blocked run with an interrupted privileged action is paused and re-blocked with enforcement_failure; an unreapable started onboarding launch and a damaged paths mapping plan stop with typed errors (internal, invalid mapping:plan) instead of continuing or widening
+- [Phase 04]: 04-43: an other-profile config that cannot be read is unavailable and stops the deny-list computation, naming the profile; only a corrupt config is skipped (WR-17) — A deny list that could not be computed must not read as a shorter one.
+- [Phase 04]: 04-43: bindings.json writes are serialized by bindings.json.lock (pid and start time, 2 s wait, dead-holder takeover), re-read under the lock, fsynced before the rename; backfillBindings holds the lock once (WR-15) — A lost binding lets a bound repository open under another profile.
+- [Phase 04]: 04-43: the cmd: provider judges credential size from stdout ending in TRUNCATION_MARKER, not the combined truncated flag (WR-16) — A verbose helper stderr must not make a good credential look oversized.
+- [Phase 04]: 04-44: restricted scope check reuses the contained run's breaches rule; out-of-scope paths are excluded from the patch, named in the block text and recorded as a scope-of-writes containment.finding
+- [Phase 04]: 04-44: the restricted:outputs step is recorded twice (judged with captured false, then stored with captured true); a resume re-takes the outputs from the clone and never relaunches the host
+- [Phase 04]: 04-45: install-host's process-tree refusal is a usage-time refusal (exit 64) like its AVARICE_RUN refusal and the sibling evidence/context/pr commands; a hook entry that is not a readable regular file is refused with exit 3 before anything is written — main() maps every usage() refusal to exit 64 and an existing test pins it; the plan text said exit 3 for the tree refusal
+- [Phase 04]: 04-45: doctor reads attended entries through the diagnostics port (attendedCommands) and checks files via doctor-deps using attendedEntryPaths, which lives beside attendedHookEntry; any command not in the written form yields no finding — keeps src/app free of adapter imports; writer and reader cannot drift
+- [Phase 04]: 04-46: the evaluation's --live checks AVARICE_LIVE and --authorization right after option parsing and the record's content (list digest, task ids, arms, cap, 24 hours) before the ceiling and before any clone, onboarding or ledger write; an empty merge plan needs no record — The record can only be matched once the plan and projection exist, but nothing may be cloned or recorded before it is judged; a plan with nothing to run cannot spend
+- [Phase 04]: 04-46: run-one records max(per-repository cap, reported sum) for an unknown spend, and both authorization records are procedural guards with the Phase 4 ledger ceiling the mechanical one — A reported sum above the cap must never be under-recorded; WR-34 is accepted on the reason that an agent running as the owner can write any owner-writable file
+- [Phase 04]: 04-47: a security test is proven by a planted regression the old test passes; the race tests retry only the evidence of a race (up to 5 attempts) and keep exactness assertions on every attempt — A vacuous oracle reports a broken control as working (T-04-129); times use performance.timeOrigin + performance.now() because a store call can finish inside one millisecond
+- [Phase 04]: 04-48: the attended hook consumes one approval per privileged command under a savepoint, all or none; commands lacking an approval are read from the consume results
+- [Phase 04]: 04-49: a Grep glob that matches every file or holds a brace group is unfiltered; knowledgeChunkLimit is 0 without a positive finite cost cap and the knowledge stage stops absent/budget_exhausted before building a corpus (WR-05, WR-06)
+- [Phase 04]: 04-51: an approval binds gitOptions, env, the line digest and the attended cwd rather than refusing redirected forms — The owner can still approve a redirected command, but only that exact command from that directory (CR-03, FR-12)
+- [Phase 04]: 04-51: a gh api body from a file or standard input is unapprovable (privileged:unapprovable) and denies the whole attended line before any request or consumption — The line digest cannot bind a body that is not on the line (WR-04, T-04-138)
+- [Phase 04]: 04-55: WR-11 fixed at D-09's values. The hook charges every Read of a run to retrieval.fullReads (one file) and retrieval.fullReadBytes (the bytes of the lines it asks for, default the first 2000) in the transaction that charges toolCalls; RETRIEVAL_CAPS is unchanged and beginRead gets no caller.
+- [Phase 04]: 04-52: WR-39 to WR-42 are test-only fixes recorded with planted-regression red evidence; IN-03 fixed with reading evidence only — The fix report states the kind of red evidence for each entry rather than presenting it as a failure on unfixed source
+- [Phase 04]: 04-52: WR-28, WR-29, WR-32 and WR-36 are deferred to plan 04-50, which may move them to fixed — AC-8 is decided at execute time and the four rows have no effect on the recorded verdict
+- [Phase 04]: 04-53: docs/system documents no evaluation harness, so the harness authorization surface needs no document; recorded in the worklist — findings.md records the harness as undocumented; the scripts are test tooling that coverage.md counts as not documented
+- [Phase 04]: 04-53: processes.md updated with the redrawn approval diagram although not listed in files_modified — its approve-flow narrative restated the single-command approval and would contradict policy-and-approvals.md
+- [Phase 04]: AC-8 token clause is no more than 95% of the baseline's tokens, inclusive (owner decision a: new bound, ADR-016); the recorded evaluation re-judges as a pass through arm B at 94.4% — ADR-016 supersedes only ADR-015's AC-8 consequence; the bound was set after the result and B clears it by 0.6 points; WR-28, WR-29, WR-32 and WR-36 stay deferred
+- [Phase 04]: 04-54: all sixteen docs/system documents passed fresh prose review over five rounds; rounds 4 and 5 were owner-scoped beyond the three-round budget — Owner decisions of 2026-11-23: scoped round 4 (diff base f19ae4e), findings.md exempt as a log, one-bullet round 5 for group C; a report with a mismatched digest (processes.md) is re-read, not trusted
+- [Phase 04]: 04-56: an approval request shows every bound value whole, or the command is refused as privileged:unapprovable (G-04-1, GCR-01); the attended cwd is shown whole under its own 512-character cap — Printing full values would still need a cap and new storage; refusing reuses the one unapprovable rule and keeps what the owner sees equal to what the digest binds
+- [Phase 04]: 04-58: restricted patch excludes out-of-scope files through a separate excludePaths option with per-path :(exclude,literal) pathspecs; the strict directory check for exclude is unchanged and the global literal-pathspecs mode is not used (GWR-04, CON-4)
+- [Phase 04]: 04-59: a bindings lock naming a live PID is stale when that process started more than 2 s after the lock's startedAt (ps etime); unreadable start falls back to a 60 s file-age bound
+- [Phase 04]: 04-59: a corrupt (invalid) profile config gets its whole root denied by knownProfileRoots, as a permission refusal does
+- [Phase 04]: 04-60: a brace-group glob still counts as unfiltered (WR-06); only the refusal reason changes, via braceGlob on the normalized search call — The refusal told the model it had no glob, inviting retries toward the consecutive-denials limit (GIN-03)
+- [Phase 04]: 04-60: pack items carry PACK_ITEM_FORMAT = 1; an absent or different format is a cache miss (reason format), judged after access scope and before revision — A reused item skips the read that sets untrusted and codeNode, so an older adapter's flags would persist (GIN-05, CON-12)
+- [Phase 04]: 04-61: a recorded success counts as success only when every bullet of its brief is delivered (otherwise partial, a recorded failure stays a failure); the verdict and D-08 count successes only — The owner decision on G-04-3, applied by judgeWithCoverage and rejudgeWithCoverage from pinned files without spend
+- [Phase 04]: 04-61: stepSpendUsd records 0 only when the store shows no launch: step row and the exit code is not null; uncountable launches, a null code or launches above finishes record at least the cap — Closes GIN-04 without letting real spend go unrecorded (T-04-162)
+- [Phase 04]: 04-57: a same-line alias or config include is unparseable; env inherited from an enclosing shell string is read for it but bound only by the enclosing command
+- [Phase 04]: 04-57: one record per substitution (start offset and terminator) de-duplicates the here-document scans; the expansion scan stays
+- [Phase 04]: 04-62: a case pattern ended by a stray parenthesis carries no expansion flags, so a default arm such as *) is not refused as a glob in the program position; ${...} bodies, $* and $? are not expansions — The shell never runs a command ended by a stray parenthesis; flagging it would refuse ordinary case statements (GWR-02)
+- [Phase 04]: 04-65: AC-8 restated under the approved amendment: successes A 0, B 2, C 3 of 6; verdict pass via B at 94.4%; knowledge pass on because C succeeds more often than B; ADR-017 records it and states the triviality of the success clause
+- [Phase 04]: 04-63: parallel yields one command string per ':::' argument (quoted, or replacing {} / {1}); a brace word beginning with '-' or '{' is refused where a reader's option decides what runs; coproc lines run in the oracle without a run count (bash 3.2 has no coproc) — A quoted argument keeps 'parallel echo ::: git push' none while 'parallel git ::: push' is a push; the brace rule closes -e{x,}ec style options without refusing other brace words; the oracle still checks every invocation a shell performs
+- [Phase 04]: 04-66: scratch-repository test scripts use the quoted glob node --test "test/**/*.test.ts", never a directory argument (Node 22 does not expand one); the full suite is recorded green on Node 22.22.3 and 26.9.0 at one commit — G-04-4: the engines floor (ADR-001) is proven by a recorded run; no src/ or engines change
+- [Phase 04]: 04-67: policy-and-approvals.md's privileged-approval row names the unshowable-value refusal beyond the code table's gh api body wording; the difference goes to findings.md in 04-69
+- [Phase 04]: 04-68: the pack stored for a run step is not documented as carrying the item format; the code records only references and a fixed field set, so only the context report and the retry's reuse report are said to carry it
+- [Phase 04]: 04-69: no docs/system document edited after round 3; both review groups failed the last allowed round, so all ten documents stay changed after review and the four open WARNINGs go to the owner (scoped round 4 is the owner's call)
 
 ### Roadmap Evolution
 
@@ -412,7 +604,9 @@ Later spikes: sandbox runtime wrapping AVARICE's own checks and host limitation 
 - [Init]: GSD skills and agents live under `~/.claude-edu` while `gsd-core` workflows and templates live under `~/.claude`. Validate "whatever `CLAUDE_CONFIG_DIR` names" against this split (host limitation 7, `doctor --extensions`).
 - [Init]: Phase numbering starts at 1; GSD 1.17.0 does not support a phase 0 (verified 2026-11-01).
 - [Phase 6]: Owns no requirement IDs; it extends FR-4, AUT-6 and OPS-6 (owned by Phases 2, 3, 4). Flip ownership if preferred.
-- [Phase 4]: Largest phase (28 requirements); consider splitting at planning time.
+- [Phase 4, resolved 2026-11-25]: `04-SECURITY.md` unregistered flag 1 (`04-36-evidence/`, live transcripts, public `origin`): the owner decided to keep the files and push.
+- [Phase 4]: `04-UAT.md` is still `diagnosed` (gaps G-04-1.. found 2026-11-24, fixed by gap plans 04-56..04-69, verified 2026-11-25); re-run `/gsd-verify-work 4` to close the UAT record.
+- [Phase 4]: Open review findings by owner decision or untriaged: WR-02 (`approve` and invisible formatting characters, `04-REVIEW-GAPS2-DISPOSITION.md`), 04-REVIEW-GAPS3 WR-01 (stale `coverage.md` ledger sentence) and IN-01..IN-05, round-3 NITs A-N1..A-N6 and B-N3..B-N5.
 - [Intel]: SYNTHESIS.md says 111 normative requirements; the correct count is 105 (149 entries in total).
 - [Open owner decisions, README 3-9]: GitHub and manual briefs only (A-3, A-4); `routine` preset limits and push or draft-PR permission; notification destination and check-in times; Mac awake only (A-8); NAS model and OS before Phase 7 (A-5); default promotion mode; enterprise questionnaire (A-6).
 - [Spec]: ADR-007's adversarial-mutation-test license is unreviewed; the `avarice-bridge` manifest shape is assumed and must be confirmed before Phase 5.
@@ -452,13 +646,13 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-15T06:54:20.672Z
-Stopped at: Milestone v1.0 complete, ready to start v1.1
+Last session: 2026-11-25T09:41:06.555Z
+Stopped at: Phase 04 complete, ready to plan Phase 5
 Resume file: None
 
 ## Operator Next Steps
 
-- Ship the phase 3 branch (worktree-phase-03) through its PR with a merge commit; the v1.0 close rides in it
-- After the merge, tag v1.0 on main (`git tag -a v1.0` on the merge commit) and push the tag
-- Start the next milestone with /gsd-new-milestone (v1.1, Phases 4-5)
+- Phase 4 is complete and verified (2026-11-25); its PR from worktree-phase-04 merges into main with a merge commit
+- Optionally re-run `/gsd-verify-work 4` to close the diagnosed UAT record
+- Then start Phase 5 on its own branch with /gsd-discuss-phase 5
 - Phase 9 (v1.0 tech-debt cleanup) is planned last, after every implemented phase

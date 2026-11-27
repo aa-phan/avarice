@@ -51,6 +51,7 @@ interface Over {
   clonePath?: string;
   workRoot?: string;
   scratchDir?: string;
+  profileRoots?: string[];
 }
 
 function input(over: Over = {}): RunScopeInput {
@@ -71,6 +72,7 @@ function input(over: Over = {}): RunScopeInput {
     dataRoot: DATA,
     home: HOME,
     workRoot: over.workRoot ?? WORK,
+    profileRoots: over.profileRoots ?? [],
     scratchDir: over.scratchDir ?? SCRATCH,
     workspace: over.workspace ?? WORKSPACE,
     readRoots: ['/gsd/core', '/gsd/agents'],
@@ -256,6 +258,34 @@ describe('computeRunScope: the default AVARICE parents are denied to a run (CON-
     const other = computeRunScope({ ...input(), home: '/Users/z' });
     assert.ok(other.denyRead.includes('/Users/z/.local/share/avarice-work'));
     assert.ok(!other.denyRead.includes(`${HOME}/.local/share/avarice-work`));
+  });
+});
+
+describe('computeRunScope: the roots of the other profiles (SEC-1, D-19)', () => {
+  const MOVED = ['/srv/moved/acme-data', '/srv/moved/acme-work', '/srv/moved/config'];
+
+  it('denies every profile root it is given, after the default parents, and no root twice', () => {
+    const scope = computeRunScope(input({ profileRoots: [...MOVED, `${HOME}/.config/avarice`, MOVED[0] as string] }));
+    assert.deepEqual(scope.denyRead, [REPO, DATA, ...credentialPaths(HOME), WORK, ...DEFAULT_PARENTS, ...MOVED]);
+  });
+
+  it('leaves the own clone and scratch as the only re-allowed paths, so a moved root is denied and the run still reads its own tree', () => {
+    const scope = computeRunScope(input({ profileRoots: MOVED }));
+    assert.deepEqual(scope.allowRead, [CLONE, SCRATCH]);
+    assert.equal(scope.denyRead.includes(CLONE), false);
+    assert.equal(scope.denyRead.includes(SCRATCH), false);
+  });
+
+  it('does not make the moved roots writable or change the write denies', () => {
+    const without = computeRunScope(input());
+    const withRoots = computeRunScope(input({ profileRoots: MOVED }));
+    assert.deepEqual(withRoots.denyWrite, without.denyWrite);
+    assert.deepEqual(withRoots.writeRoots, without.writeRoots);
+  });
+
+  it('refuses a profile root that is not a normalized absolute path, as it refuses the work root', () => {
+    assert.throws(() => computeRunScope(input({ profileRoots: ['relative/root'] })), /profileRoots/);
+    assert.throws(() => computeRunScope(input({ profileRoots: ['/srv/a/../b'] })), /profileRoots/);
   });
 });
 

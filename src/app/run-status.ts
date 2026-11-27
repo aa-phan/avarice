@@ -2,7 +2,7 @@
 // takes no lease, starts no model and opens no transcript (T-02-52): every value comes from ledger rows (IDs, states, statuses,
 // revisions, counts), never from model output. The shapes here are the JSON of `status --json` (the optional `runs` array of a
 // project entry) and of `inbox --json`; the human renderers live in src/cli/render/run-view.ts.
-import { ok } from '../domain/result.ts';
+import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import { checksNotRun } from './checks.ts';
@@ -10,7 +10,7 @@ import { amendCommandOf, isAmendOnly, optionsOf } from '../domain/decision-polic
 import type { DecisionOption } from '../domain/decision-policy.ts';
 import { isRunResumable } from '../domain/run-lifecycle.ts';
 import type { RunBlockedReason, RunState } from '../domain/run-lifecycle.ts';
-import type { DecisionRow, DecisionUrgency, EvidenceRow, GateResultRow, Ledger, NotificationRow, NotificationState, RunCheckpointRow, RunRow, RunStepRow } from '../ports/ledger.ts';
+import type { AttemptRow, DecisionRow, DecisionUrgency, EvidenceRow, GateResultRow, Ledger, NotificationRow, NotificationState, RunCheckpointRow, RunRow, RunStatusInputs, RunStepRow } from '../ports/ledger.ts';
 
 export interface RunCheckpointView {
   seq: number;
@@ -46,6 +46,27 @@ export interface RunReferenceView {
   kind: string;
   id: string;
   revision: string;
+}
+
+// A piece of evidence the owner brought in by hand (plan 04-27; `avarice evidence add`). It is never a measurement and never a gate input, so it is listed apart from
+// `evidence`. `ref` is where the owner said it lives, `recordedBy` the OS user who recorded it and `recordedAt` the time of the row.
+export interface RunManualEvidenceView {
+  evidenceId: string;
+  kind: string;
+  name: string;
+  status: string;
+  ref?: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+// A reference the run recorded whose last refresh did not find it fresh (plan 04-20): `stale` (the index was built before the repository's current HEAD),
+// or `changed`, `deleted`, `access_revoked` or `unavailable`. The ID is the provider's own, verbatim.
+export interface RunStaleReferenceView {
+  provider: string;
+  kind: string;
+  id: string;
+  freshness: string;
 }
 
 // One work item of the run as the ledger holds it (AUT-12): its state, the size and model it was planned with, what it waits for and how many
@@ -125,6 +146,14 @@ export interface RunStatus {
   cancelRequestedAt?: string;
   // Appended under the frozen-shapes rule (D-35): the declared checks that are neither required nor a target, so the run never runs them. Present only when there is one.
   checksNotRun?: RunCheckNotRunView[];
+  // Appended under the frozen-shapes rule (plan 04-20): the references the run recorded that were last refreshed to anything but `fresh`, in the order a resume
+  // refreshes them. Present only when there is one.
+  staleReferences?: RunStaleReferenceView[];
+  // Appended under the frozen-shapes rule (plan 04-23; D-12): present, and `true`, only for a run started with `--restricted` (its stored contract says so). A contained run has no
+  // such key, so every output a contained run produced before stays byte-identical.
+  restricted?: true;
+  // Appended under the frozen-shapes rule (plan 04-27): the evidence the owner recorded by hand, in the order it was recorded. Present only when there is one.
+  manualEvidence?: RunManualEvidenceView[];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -153,6 +182,19 @@ function finalEvidence(rows: readonly EvidenceRow[]): EvidenceRow[] {
     if (held === undefined || isFinal || !heldFinal) picked.set(row.name, row);
   }
   return [...picked.values()];
+}
+
+// The evidence recorded by hand, in the order the rows were inserted (the ledger returns them by row). A row is manual when it says so in its environment and its kind is one
+// of the three the owner can record; no other row is listed, so a measured row can never appear here.
+const MANUAL_EVIDENCE_KINDS: readonly string[] = ['ci', 'review', 'manual'];
+function manualEvidenceOf(rows: readonly EvidenceRow[]): RunManualEvidenceView[] {
+  return rows
+    .filter((row) => MANUAL_EVIDENCE_KINDS.includes(row.kind) && row.environment['source'] === 'manual')
+    .map((row) => {
+      const ref = row.environment['ref'];
+      const by = row.environment['recordedBy'];
+      return { evidenceId: row.evidenceId, kind: row.kind, name: row.name, status: row.status, ...(typeof ref === 'string' ? { ref } : {}), recordedBy: typeof by === 'string' ? by : 'unknown', recordedAt: row.createdAt };
+    });
 }
 
 function latestGates(rows: readonly GateResultRow[]): GateResultRow[] {
@@ -190,6 +232,11 @@ function referencesOf(body: unknown): RunReferenceView[] {
   return out;
 }
 
+// Whether a stored contract body says the run is restricted. Read defensively, as the other readers of the body are: anything that is not a compiled contract is not.
+function isRestricted(body: unknown): boolean {
+  return isObject(body) && body['mode'] === 'restricted';
+}
+
 const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === 'string');
 
 // The declared checks of a stored contract body that the run does not execute (D-35). The body is read defensively, as referencesOf reads it: anything that is not the
@@ -211,18 +258,14 @@ export function checksNotRunOf(body: unknown): RunCheckNotRunView[] {
   return checksNotRun({ execution: { checks: names }, verification: { requiredChecks, targetChecks } } as Pick<RunContract, 'execution' | 'verification'>).map((name) => ({ name, reason: 'not required' as const }));
 }
 
-function interruptedOf(ledger: Ledger, run: RunRow, checkpoint: RunCheckpointRow | null, nowMs: number): Result<RunInterrupted | undefined> {
-  if (!isRunResumable(run.state) || leaseIsLive(run, nowMs)) return ok(undefined);
-  const attempts = ledger.listRunAttempts(run.runId);
-  if (!attempts.ok) return attempts;
-  const open = [...attempts.value].reverse().find((a) => a.endedAt === null);
-  const steps = ledger.getRunSteps(run.runId);
-  if (!steps.ok) return steps;
-  const started = [...steps.value].reverse().find((s) => s.status === 'started');
+function interruptedOf(run: RunRow, checkpoint: RunCheckpointRow | null, attempts: readonly AttemptRow[], steps: readonly RunStepRow[], nowMs: number): RunInterrupted | undefined {
+  if (!isRunResumable(run.state) || leaseIsLive(run, nowMs)) return undefined;
+  const open = [...attempts].reverse().find((a) => a.endedAt === null);
+  const started = [...steps].reverse().find((s) => s.status === 'started');
   const nextAction = checkpoint === null ? 'unknown' : checkpoint.nextAction;
   // A step the supervisor had begun after its last checkpoint is the one that was in flight; otherwise the checkpoint's action is.
   const step = started !== undefined && (checkpoint === null || started.startedAt >= checkpoint.createdAt) ? started.step : nextAction;
-  return ok({
+  return {
     state: run.state,
     presentedAs: 'paused',
     reason: run.state === 'verifying' ? 'verification interrupted' : 'supervisor interrupted',
@@ -230,7 +273,7 @@ function interruptedOf(ledger: Ledger, run: RunRow, checkpoint: RunCheckpointRow
     step,
     nextAction,
     resumeCommand: `avarice resume ${run.runId}`,
-  });
+  };
 }
 
 function itemsOf(rows: ReadonlyArray<{ itemId: string; state: string; size: string; model: string; dependsOn: readonly string[]; attempts: number }>): RunItemView[] {
@@ -250,54 +293,41 @@ function notificationsOfRun(rows: readonly NotificationRow[]): RunNotificationVi
   return { delivered: count('delivered'), pending: count('pending'), held: count('held'), failed: count('failed'), lastError: latest === undefined ? null : latest.lastError };
 }
 
-function statusOf(ledger: Ledger, run: RunRow, nowMs: number): Result<RunStatus> {
-  const checkpoints = ledger.listRunCheckpoints(run.runId);
-  if (!checkpoints.ok) return checkpoints;
-  const evidenceRows = ledger.listEvidence(run.runId);
-  if (!evidenceRows.ok) return evidenceRows;
-  const gateRows = ledger.listGateResults(run.runId);
-  if (!gateRows.ok) return gateRows;
-  const decisionRows = ledger.listDecisions({ runId: run.runId });
-  if (!decisionRows.ok) return decisionRows;
-  const workItems = ledger.listWorkItems(run.runId);
-  if (!workItems.ok) return workItems;
-  const notificationRows = ledger.listNotifications({ runId: run.runId });
-  if (!notificationRows.ok) return notificationRows;
-  const budgetRows = ledger.getBudgets(run.runId);
-  if (!budgetRows.ok) return budgetRows;
-  const contract = ledger.getRunContract(run.runId);
-  if (!contract.ok) return contract;
-  const steps = ledger.getRunSteps(run.runId);
-  if (!steps.ok) return steps;
+// One run's status from the rows the ledger read for it in one batch (loadRunStatusInputs): the rows the per-run reads return.
+function statusOf(run: RunRow, inputs: RunStatusInputs, nowMs: number): RunStatus {
+  const latest = inputs.checkpoints.at(-1) ?? null;
+  const interrupted = interruptedOf(run, latest, inputs.attempts, inputs.steps, nowMs);
+  const named = lastCheckpointOf(inputs.checkpoints);
+  const evidence = finalEvidence(inputs.evidence);
+  const notRun = checksNotRunOf(inputs.contract === null ? null : inputs.contract.body);
+  const manual = manualEvidenceOf(inputs.evidence);
+  const stale = inputs.taskRefs.filter((r) => r.freshness !== 'fresh').map((r) => ({ provider: r.provider, kind: r.kind, id: r.id, freshness: r.freshness }));
 
-  const latest = checkpoints.value.at(-1) ?? null;
-  const interrupted = interruptedOf(ledger, run, latest, nowMs);
-  if (!interrupted.ok) return interrupted;
-  const named = lastCheckpointOf(checkpoints.value);
-  const evidence = finalEvidence(evidenceRows.value);
-  const notRun = checksNotRunOf(contract.value === null ? null : contract.value.body);
-
-  return ok({
+  return {
     runId: run.runId,
     title: run.title,
     state: run.state,
     reason: run.reason,
     lastCheckpoint: named === null ? null : { seq: named.seq, nextAction: named.nextAction, revision: named.revision, at: named.createdAt },
     branch: run.branch,
-    commit: handedOffCommit(steps.value),
+    commit: handedOffCommit(inputs.steps),
     clean: evidence.length === 0 ? null : evidence.every((e) => e.clean),
     evidence: evidence.map((e) => ({ name: e.name, kind: e.kind, status: e.status, revision: e.revision, clean: e.clean, ...(e.environment['preExisting'] === true ? { preExisting: true as const } : {}) })),
-    gates: latestGates(gateRows.value).map((g) => ({ gate: g.gate, passed: g.passed, revision: g.revision })),
-    openDecisions: decisionRows.value.filter((d) => d.state === 'open').length,
-    budgets: budgetRows.value.map((b) => ({ name: b.name, used: b.used, limit: b.limit })),
-    references: referencesOf(contract.value === null ? null : contract.value.body),
-    ...(interrupted.value !== undefined ? { interrupted: interrupted.value } : {}),
-    items: itemsOf(workItems.value),
-    decisions: decisionsOfRun(decisionRows.value),
-    notifications: notificationsOfRun(notificationRows.value),
+    gates: latestGates(inputs.gateResults).map((g) => ({ gate: g.gate, passed: g.passed, revision: g.revision })),
+    openDecisions: inputs.decisions.filter((d) => d.state === 'open').length,
+    // The retrieval counters (plan 04-28) are rows of the same table, but status keeps its five budgets: the frozen shape lists them, and the retrieval counters are read from the ledger.
+    budgets: inputs.budgets.filter((b) => !b.name.startsWith('retrieval.')).map((b) => ({ name: b.name, used: b.used, limit: b.limit })),
+    references: referencesOf(inputs.contract === null ? null : inputs.contract.body),
+    ...(interrupted !== undefined ? { interrupted } : {}),
+    items: itemsOf(inputs.workItems),
+    decisions: decisionsOfRun(inputs.decisions),
+    notifications: notificationsOfRun(inputs.notifications),
     ...(run.cancelRequestedAt !== null ? { cancelRequestedAt: run.cancelRequestedAt } : {}),
     ...(notRun.length > 0 ? { checksNotRun: notRun } : {}),
-  });
+    ...(stale.length > 0 ? { staleReferences: stale } : {}),
+    ...(isRestricted(inputs.contract === null ? null : inputs.contract.body) ? { restricted: true as const } : {}),
+    ...(manual.length > 0 ? { manualEvidence: manual } : {}),
+  };
 }
 
 // Interrupted runs first, then runs blocked on a decision, then the rest. Stable: the order within a rank is the order given (creation
@@ -312,11 +342,14 @@ export function orderRuns<T extends { interrupted?: unknown; state: string }>(ru
 export function getRunStatuses(ledger: Ledger, projectId: string, nowMs: number): Result<RunStatus[]> {
   const rows = ledger.listRuns(projectId);
   if (!rows.ok) return rows;
+  // Every per-run table is read in one batch, so the cost of status does not grow with a query per run (OPS-5, AC-2).
+  const batch = ledger.loadRunStatusInputs(rows.value.map((row) => row.runId));
+  if (!batch.ok) return batch;
   const out: RunStatus[] = [];
   for (const row of rows.value) {
-    const built = statusOf(ledger, row, nowMs);
-    if (!built.ok) return built;
-    out.push(built.value);
+    const inputs = batch.value.get(row.runId);
+    if (inputs === undefined) return err({ kind: 'internal', cause: `no status inputs were read for run ${row.runId}` });
+    out.push(statusOf(row, inputs, nowMs));
   }
   return ok(orderRuns(out));
 }

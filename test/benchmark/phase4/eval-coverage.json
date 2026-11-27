@@ -1,0 +1,363 @@
+{
+  "schema": 1,
+  "kind": "avarice-eval-brief-coverage",
+  "decision": "ADR-017",
+  "resultsSha256": "3b40148356b2f2dd7420d18ed6e6d36b7e6d73378fe8f4d52deeba5fa9e5b5e8",
+  "tasksSha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+  "judgedBy": "Claude, plan 04-64 executor, from recorded evidence",
+  "judgedAt": "2026-11-24T22:12:13Z",
+  "method": "Judged from recorded data only (no model, no spend, no re-run): the run transcript and run summary of each of the 18 runs under 04-36-evidence, through the clone files its transcript edited and the Edit and Write inputs on the cited lines. Rules fixed before judging and the same for every arm: a bullet that asks for tests of one or more kinds (unit, e2e) is delivered only when the run edited a test file of each kind it names (tests/unit/ for unit, tests/e2e/ for e2e), partly when it edited some of the kinds, skipped when none; a bullet that asks for a behavior or a code change is delivered when an edit implements it as stated, partly when an edit implements part of it, skipped when no edit does; a bullet that asks for a comment or text is delivered when an edit adds that text; a run with no source edit has every bullet skipped. A run that recorded a failure is judged by the same rules; its outcome stays a failure.",
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "A",
+      "runId": "run_01M7VDA8YK7NBWHGEEATTCAKTE",
+      "bullets": [
+        {
+          "text": "Hold the LazyMotion loader pending while reduced and release it when the preference flips",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-A/transcripts/run-transcript-45a8310f95bd8a14.txt: src/anim/MotionFeatures.tsx line 191 holds the loader behind a per-mount gate that the preference flip releases."
+        },
+        {
+          "text": "Add unit and e2e coverage for the reduced-then-off case",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-A/transcripts/run-transcript-45a8310f95bd8a14.txt: unit test written (tests/unit/motion-features.test.tsx line 195) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 288) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T01",
+      "arm": "B",
+      "runId": "run_01M7VE1FD4W0XB8JVCV66Z00GK",
+      "bullets": [
+        {
+          "text": "Hold the LazyMotion loader pending while reduced and release it when the preference flips",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-B/transcripts/run-transcript-7b2eccc80069116c.txt: src/anim/MotionFeatures.tsx line 221 holds the loader behind a one-way gate that opens when reduced motion reads off."
+        },
+        {
+          "text": "Add unit and e2e coverage for the reduced-then-off case",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-B/transcripts/run-transcript-7b2eccc80069116c.txt: unit test written (tests/unit/motion-features.test.tsx line 225) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 334) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T01",
+      "arm": "C",
+      "runId": "run_01M7VF2NEQR32EVVVA716Q7W7Z",
+      "bullets": [
+        {
+          "text": "Hold the LazyMotion loader pending while reduced and release it when the preference flips",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-C/transcripts/run-transcript-59443a56c5212f55.txt: src/anim/MotionFeatures.tsx lines 210, 213, 217 holds the loader behind a one-shot release gate that opens when reduced is off."
+        },
+        {
+          "text": "Add unit and e2e coverage for the reduced-then-off case",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T01-C/transcripts/run-transcript-59443a56c5212f55.txt: unit test written (tests/unit/motion-features.test.tsx lines 199, 236, 248; tests/unit/motion-features-mount.test.tsx lines 222, 239, 251) for the reduced-then-off case, but no file under tests/e2e/ was edited, and the final result (line 356) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "A",
+      "runId": "run_01M7VG4J8QV3RM7CKH9Y6YRC72",
+      "bullets": [
+        {
+          "text": "Backdrop closes only when pointerdown and pointerup both land on the dialog element (WR-02)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-A/transcripts/run-transcript-0517872e0c9505a9.txt: src/sections/Projects/ProjectDialog.tsx lines 202, 205, 208, 211, 214 tracks pointerdown and pointerup on the dialog element and closes on a backdrop click only when both landed there."
+        },
+        {
+          "text": "ArrowLeft and ArrowRight ignore Alt, Ctrl, Meta, Shift and key repeat (WR-03)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-A/transcripts/run-transcript-0517872e0c9505a9.txt: src/sections/Projects/ProjectDialog.tsx lines 202, 205, 208, 211, 214 the key handler returns early, with no step and no preventDefault, for Alt, Ctrl, Meta, Shift and repeat."
+        },
+        {
+          "text": "e2e drag, modifier and repeat cases plus unit coverage",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-A/transcripts/run-transcript-0517872e0c9505a9.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 226), but no file under tests/e2e/ was edited, and the final result (line 313) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "B",
+      "runId": "run_01M7VH1JBT0D96N6RVXRNW1YMW",
+      "bullets": [
+        {
+          "text": "Backdrop closes only when pointerdown and pointerup both land on the dialog element (WR-02)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-B/transcripts/run-transcript-9a8b14d9b506ebfb.txt: src/sections/Projects/ProjectDialog.tsx lines 185, 188, 191, 194, 197, 202 a press flag set on pointerdown and kept on pointerup closes the dialog only when both landed on the backdrop."
+        },
+        {
+          "text": "ArrowLeft and ArrowRight ignore Alt, Ctrl, Meta, Shift and key repeat (WR-03)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-B/transcripts/run-transcript-9a8b14d9b506ebfb.txt: src/sections/Projects/ProjectDialog.tsx lines 185, 188, 191, 194, 197, 202 the key handler returns early, with no step and no preventDefault, for Alt, Ctrl, Meta, Shift and repeat."
+        },
+        {
+          "text": "e2e drag, modifier and repeat cases plus unit coverage",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-B/transcripts/run-transcript-9a8b14d9b506ebfb.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx line 207), but no file under tests/e2e/ was edited, and the final result (line 331) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "C",
+      "runId": "run_01M7VJ2EJ69B1J96XSJKX39RB5",
+      "bullets": [
+        {
+          "text": "Backdrop closes only when pointerdown and pointerup both land on the dialog element (WR-02)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-C/transcripts/run-transcript-2bb8f52dfb57a62d.txt: src/sections/Projects/ProjectDialog.tsx lines 185, 188, 192, 195 closes on pointerup only when the press began on the dialog element."
+        },
+        {
+          "text": "ArrowLeft and ArrowRight ignore Alt, Ctrl, Meta, Shift and key repeat (WR-03)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-C/transcripts/run-transcript-2bb8f52dfb57a62d.txt: src/sections/Projects/ProjectDialog.tsx lines 185, 188, 192, 195 the key handler returns early, with no step and no preventDefault, for Alt, Ctrl, Meta, Shift and repeat."
+        },
+        {
+          "text": "e2e drag, modifier and repeat cases plus unit coverage",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T02-C/transcripts/run-transcript-2bb8f52dfb57a62d.txt: unit coverage of the drag, modifier and repeat cases written (tests/unit/project-dialog.test.tsx lines 200, 205), but no file under tests/e2e/ was edited, and the final result (line 278) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        }
+      ]
+    },
+    {
+      "task": "T03",
+      "arm": "A",
+      "runId": "run_01M7VK4GDDSHDBGWDRC1FYZJ4M",
+      "bullets": [
+        {
+          "text": "Copy button accessible name is 'Copy email <address>' (WCAG 2.5.3, WR-04)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-A/transcripts/run-transcript-f8548c416842e40f.txt: src/sections/Contact/Contact.tsx lines 215, 218 the copy button's name is set to Copy email followed by the address."
+        },
+        {
+          "text": "Sleeve name is its visible title via aria-labelledby; dates, context, stack, +N more and position move to an sr-only description",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-A/transcripts/run-transcript-f8548c416842e40f.txt: src/sections/Projects/Sleeve.tsx lines 212, 234, 255, 258, 290, 304 the sleeve is named by its title through aria-labelledby and the dates, context, stack, +N more and position sit in an sr-only description."
+        },
+        {
+          "text": "Sleeve is relative so the sr-only span stays clipped inside the crate",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-A/transcripts/run-transcript-f8548c416842e40f.txt: src/sections/Projects/Sleeve.tsx lines 212, 234, 255, 258, 290, 304 the sleeve button carries the relative class."
+        }
+      ]
+    },
+    {
+      "task": "T03",
+      "arm": "B",
+      "runId": "run_01M7VM4EN2GZWXCXFV8MTDP93S",
+      "bullets": [
+        {
+          "text": "Copy button accessible name is 'Copy email <address>' (WCAG 2.5.3, WR-04)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-B/transcripts/run-transcript-a58484002dee4875.txt: src/sections/Contact/Contact.tsx lines 203, 206 the copy button's name is set to Copy email followed by the address."
+        },
+        {
+          "text": "Sleeve name is its visible title via aria-labelledby; dates, context, stack, +N more and position move to an sr-only description",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-B/transcripts/run-transcript-a58484002dee4875.txt: src/sections/Projects/Sleeve.tsx line 216 the sleeve is named by its title through aria-labelledby and the dates, context, stack, +N more and position sit in an sr-only description."
+        },
+        {
+          "text": "Sleeve is relative so the sr-only span stays clipped inside the crate",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-B/transcripts/run-transcript-a58484002dee4875.txt: src/sections/Projects/Sleeve.tsx line 216 the sleeve button carries the relative class."
+        }
+      ]
+    },
+    {
+      "task": "T03",
+      "arm": "C",
+      "runId": "run_01M7VN7EHDYWBRV9Q9G5KDH2WE",
+      "bullets": [
+        {
+          "text": "Copy button accessible name is 'Copy email <address>' (WCAG 2.5.3, WR-04)",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-C/transcripts/run-transcript-1bf520c952c1bb0c.txt: src/sections/Contact/Contact.tsx lines 250, 253 the copy button's name is set to Copy email followed by the address."
+        },
+        {
+          "text": "Sleeve name is its visible title via aria-labelledby; dates, context, stack, +N more and position move to an sr-only description",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-C/transcripts/run-transcript-1bf520c952c1bb0c.txt: src/sections/Projects/Sleeve.tsx lines 272, 275, 278 the sleeve is named by its title through aria-labelledby and the dates, context, stack, +N more and position sit in an sr-only description."
+        },
+        {
+          "text": "Sleeve is relative so the sr-only span stays clipped inside the crate",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T03-C/transcripts/run-transcript-1bf520c952c1bb0c.txt: src/sections/Projects/Sleeve.tsx lines 272, 275, 278 the sleeve button carries the relative class."
+        }
+      ]
+    },
+    {
+      "task": "T04",
+      "arm": "A",
+      "runId": "run_01M7VP8WFJDTKMH12WWZR0E0RQ",
+      "bullets": [
+        {
+          "text": "add monthYear in src/lib/dates.ts, strict YYYY-MM, UTC formatting",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-A/transcripts/run-transcript-62e9ae74c2ca6abb.txt: src/lib/dates.ts line 239 monthYear accepts only YYYY-MM and builds no Date, so the output does not depend on the time zone, the effect UTC formatting gives."
+        },
+        {
+          "text": "drop the en-dash label split so any label separator renders December 2026",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-A/transcripts/run-transcript-62e9ae74c2ca6abb.txt: src/sections/Education/Education.tsx lines 247, 250 the lead is monthYear of dates.end and the en-dash split is removed."
+        },
+        {
+          "text": "unit cases for the formatter and a hyphen-label Education render",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-A/transcripts/run-transcript-62e9ae74c2ca6abb.txt: tests/unit/dates.test.ts line 243 formatter cases; tests/unit/education.test.tsx line 254 Education renders December 2026 for a hyphen label."
+        }
+      ]
+    },
+    {
+      "task": "T04",
+      "arm": "B",
+      "runId": "run_01M7VQ0J28NAJCGJVAP1W0NE8G",
+      "bullets": [
+        {
+          "text": "add monthYear in src/lib/dates.ts, strict YYYY-MM, UTC formatting",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-B/transcripts/run-transcript-da39c86d0bbeab0c.txt: src/lib/dates.ts line 266 monthYear accepts only YYYY-MM and formats in UTC."
+        },
+        {
+          "text": "drop the en-dash label split so any label separator renders December 2026",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-B/transcripts/run-transcript-da39c86d0bbeab0c.txt: src/sections/Education/Education.tsx lines 270, 273 the lead is monthYear of dates.end and the en-dash split is removed."
+        },
+        {
+          "text": "unit cases for the formatter and a hyphen-label Education render",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-B/transcripts/run-transcript-da39c86d0bbeab0c.txt: tests/unit/dates.test.ts line 278 formatter cases; tests/unit/sections.test.tsx line 281 Education renders December 2026 for a hyphen label."
+        }
+      ]
+    },
+    {
+      "task": "T04",
+      "arm": "C",
+      "runId": "run_01M7VR7YZ4QR908ENT6WPN0JG8",
+      "bullets": [
+        {
+          "text": "add monthYear in src/lib/dates.ts, strict YYYY-MM, UTC formatting",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-C/transcripts/run-transcript-f07c3f745b4a3765.txt: src/lib/dates.ts line 207 monthYear accepts only YYYY-MM and formats in UTC."
+        },
+        {
+          "text": "drop the en-dash label split so any label separator renders December 2026",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-C/transcripts/run-transcript-f07c3f745b4a3765.txt: src/sections/Education/Education.tsx lines 210, 214, 217 the lead is monthYear of dates.end and the en-dash split is removed."
+        },
+        {
+          "text": "unit cases for the formatter and a hyphen-label Education render",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T04-C/transcripts/run-transcript-f07c3f745b4a3765.txt: tests/unit/dates.test.ts line 220 formatter cases; tests/unit/education.test.tsx line 223 Education renders December 2026 for a hyphen label."
+        }
+      ]
+    },
+    {
+      "task": "T05",
+      "arm": "A",
+      "runId": "run_01M7VS76KK7S2AGASBZ4W1JX5M",
+      "bullets": [
+        {
+          "text": "the browser now takes the 40 w candidate at 1x and 2x and 60 w at 3x",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-A/transcripts/run-transcript-b3dfb11383b639b0.txt: src/sections/Experience/Experience.tsx lines 215, 218 every logo source gets sizes of 20px, the setting that makes the browser take 40 w at 1x and 2x and 60 w at 3x."
+        },
+        {
+          "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-A/transcripts/run-transcript-b3dfb11383b639b0.txt: unit checks on the picture sources written (tests/unit/experience-logo-sizes.test.tsx lines 237, 247, 266, 269), but no file under tests/e2e/ was edited, and the final result (line 381) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        },
+        {
+          "text": "logo comment in images.ts states the sizes-based choice",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-A/transcripts/run-transcript-b3dfb11383b639b0.txt: src/content/images.ts line 222 the logo comment now states the sizes-based choice."
+        }
+      ]
+    },
+    {
+      "task": "T05",
+      "arm": "B",
+      "runId": "run_01M7VT3WMHS745W7MFM840GH96",
+      "bullets": [
+        {
+          "text": "the browser now takes the 40 w candidate at 1x and 2x and 60 w at 3x",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-B/transcripts/run-transcript-b8dac768c3eeb837.txt: src/sections/Experience/Experience.tsx lines 221, 224, 227 every logo source gets sizes of 20px, the setting that makes the browser take 40 w at 1x and 2x and 60 w at 3x."
+        },
+        {
+          "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-B/transcripts/run-transcript-b8dac768c3eeb837.txt: unit checks on the picture sources written (tests/unit/experience-logos.test.tsx lines 238, 249, 357), but no file under tests/e2e/ was edited, and the final result (line 443) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        },
+        {
+          "text": "logo comment in images.ts states the sizes-based choice",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-B/transcripts/run-transcript-b8dac768c3eeb837.txt: src/content/images.ts lines 253, 257 the logo comment now states the sizes-based choice."
+        }
+      ]
+    },
+    {
+      "task": "T05",
+      "arm": "C",
+      "runId": "run_01M7VV9EKPZKWFNN70YVFVH6N1",
+      "bullets": [
+        {
+          "text": "the browser now takes the 40 w candidate at 1x and 2x and 60 w at 3x",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-C/transcripts/run-transcript-77ff773d1bd02665.txt: src/sections/Experience/Experience.tsx lines 237, 240 every logo source gets sizes of 20px, the setting that makes the browser take 40 w at 1x and 2x and 60 w at 3x."
+        },
+        {
+          "text": "unit check on every picture source; e2e density cases at pixel ratio 1 and 3",
+          "status": "partly",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-C/transcripts/run-transcript-77ff773d1bd02665.txt: unit checks on the picture sources written (tests/unit/employer-logo.test.tsx lines 255, 269, 284), but no file under tests/e2e/ was edited, and the final result (line 388) names the end-to-end test only as not written or out of scope; the e2e kind is missing."
+        },
+        {
+          "text": "logo comment in images.ts states the sizes-based choice",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T05-C/transcripts/run-transcript-77ff773d1bd02665.txt: src/content/images.ts line 244 the logo comment now states the sizes-based choice."
+        }
+      ]
+    },
+    {
+      "task": "T06",
+      "arm": "A",
+      "runId": "run_01M7VWCZ32K31TPE52ZSQ6M24R",
+      "bullets": [
+        {
+          "text": "fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T06-A/transcripts/run-transcript-dae21bc17cbb5b5b.txt: src/lib/theme.ts lines 176, 180, 183 a module flag set in applyTheme stops the OS scheme handler from overriding an explicit choice."
+        }
+      ]
+    },
+    {
+      "task": "T06",
+      "arm": "B",
+      "runId": "run_01M7VX2SMNSNAGT8S35WH18F7V",
+      "bullets": [
+        {
+          "text": "fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T06-B/transcripts/run-transcript-aa17da741b723680.txt: src/lib/theme.ts lines 188, 193 an in-memory choice kept when the storage write fails is honored by the OS scheme handler."
+        }
+      ]
+    },
+    {
+      "task": "T06",
+      "arm": "C",
+      "runId": "run_01M7VY172ZDKZJGMZJ1RV67PJ4",
+      "bullets": [
+        {
+          "text": "fix(02): WR-04 keep an explicit theme choice for the session when storage is blocked",
+          "status": "delivered",
+          "evidence": ".planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-evidence/T06-C/transcripts/run-transcript-9a552da29325b9e5.txt: src/lib/theme.ts lines 196, 199 a flag set when the choice did not reach storage stops the OS scheme handler from overriding it."
+        }
+      ]
+    }
+  ]
+}

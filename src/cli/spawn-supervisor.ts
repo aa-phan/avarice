@@ -42,7 +42,8 @@ export function spawnSupervisor(request: SpawnRequest): SpawnResult {
   }
 }
 
-// The supervisor reads the same three profile roots the spawning command resolved, whatever else its environment says. Given the run, it also runs the host
+// The supervisor opens the profile the spawning command selected (AVARICE_PROFILE; a child has no repository to read a binding from) and reads the same
+// three profile roots the spawning command resolved, whatever else its environment says. Given the run, it also runs the host
 // under the configuration directory the run recorded at start (plan 03-43): the host finds a session only in the directory of the process that launches it, so
 // every supervisor of a run, whichever terminal started it, uses the start's. A run with no recorded directory keeps the environment of the command.
 export function supervisorEnv(deps: AppDeps, runId?: string): NodeJS.ProcessEnv {
@@ -51,6 +52,7 @@ export function supervisorEnv(deps: AppDeps, runId?: string): NodeJS.ProcessEnv 
     AVARICE_CONFIG_HOME: deps.profile.configHome,
     AVARICE_DATA_ROOT: deps.profile.dataRoot,
     AVARICE_WORK_ROOT: deps.profile.workRoot,
+    AVARICE_PROFILE: deps.profile.profile,
   };
   const recorded = runId === undefined ? undefined : recordedHostConfigDir(deps, runId);
   if (recorded !== undefined) env['CLAUDE_CONFIG_DIR'] = recorded;

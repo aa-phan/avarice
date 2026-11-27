@@ -6,7 +6,7 @@
 import { FAST_MAP_FILES, completenessFor, requiredFilesFor } from './mapping.ts';
 import type { Completeness, MappingPlan } from './mapping.ts';
 import { matchesAny } from './glob.ts';
-import { danglingShare, referencesOf } from './path-references.ts';
+import { danglingShare, explicitReferencesOf, referencesOf } from './path-references.ts';
 import { findSecrets } from './secret-patterns.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 
@@ -202,15 +202,17 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
     detail: missing.length === 0 ? `${required.length} required file(s) present` : `missing: ${missing.join(', ')}`,
   };
 
-  // 2. Stamp.
+  // 2. Stamp. A map AVARICE had made is stamped with the staging HEAD. An adopted map keeps the stamp of the commit it was mapped at; what
+  // makes it adoptable is GSD's drift check in staging (the workspace stage), so here every file only has to carry a stamp.
   const head = bare(facts.stagingHead);
+  const adopted = plan.mode === 'adopt';
   const badStamps: string[] = [];
-  for (const path of required) {
+  for (const path of adopted ? [...stampsByPath.keys()] : required) {
     const stamps = stampsByPath.get(path);
     if (!stamps) continue;
     for (const stamp of stamps) {
       const value = stamp === null ? '' : bare(stamp);
-      if (head === '' || value === '' || value !== head) {
+      if (value === '' || (!adopted && (head === '' || value !== head))) {
         badStamps.push(`${path} (${stamp === null || value === '' ? 'no stamp' : `stamped ${value}`})`);
       }
     }
@@ -218,8 +220,11 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   const stamp: ValidationCheck = {
     name: 'stamp',
     passed: badStamps.length === 0,
-    detail:
-      badStamps.length === 0
+    detail: adopted
+      ? badStamps.length === 0
+        ? `every adopted file carries the stamp of the commit it was mapped at (${stampsByPath.size} file(s))`
+        : `adopted file(s) without a stamp: ${badStamps.join(', ')}`
+      : badStamps.length === 0
         ? `last_mapped_commit equals the staging HEAD in ${required.length} file(s)`
         : `${head === '' ? 'staging HEAD is empty; ' : ''}not equal to staging HEAD ${head}: ${badStamps.join(', ')}`,
   };
@@ -242,6 +247,7 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   const resolved = danglingShare(refs, [...facts.knownPaths, ...facts.files.map((f) => f.path), CONFIG_JSON], ownGlobs, facts.ignoredReferences ?? [], {
     moduleNames: facts.moduleNames ?? [],
     actionRefs: facts.actionRefs ?? [],
+    explicit: explicitReferencesOf(facts.files.map((f) => f.text)),
   });
   const withinLimit = resolved.share <= limits.danglingShare;
   const counts = `${resolved.dangling.length} of ${resolved.total} named path(s) dangling (${percent(resolved.share)}, limit ${percent(limits.danglingShare)})`;
@@ -252,10 +258,12 @@ export function validateMapArtifacts(facts: MapArtifactFacts, plan: MappingPlan,
   if (resolved.byRule.module.length > 0) forgiven.push(`${resolved.byRule.module.length} module specifier(s) of a committed dependency`);
   if (resolved.byRule.action.length > 0) forgiven.push(`${resolved.byRule.action.length} workflow action(s) named by a committed workflow`);
   const byRule = forgiven.length === 0 ? '' : `; counted as known: ${forgiven.join('; ')}`;
+  // A token that does not plausibly name a repository path (a model id, a language construct, a zone, a URL) is in neither count.
+  const notPaths = resolved.nonPaths.length === 0 ? '' : `; not counted: ${resolved.nonPaths.length} token(s) that do not name a repository path (${listed(resolved.nonPaths, 3)})`;
   const pathReferences: ValidationCheck = {
     name: 'path-references',
     passed: withinLimit,
-    detail: withinLimit ? `${counts}${byRule}` : `${counts}: ${listed(resolved.dangling)}${byRule}`,
+    detail: withinLimit ? `${counts}${byRule}${notPaths}` : `${counts}: ${listed(resolved.dangling)}${byRule}${notPaths}`,
   };
 
   // 5. Secrets: GSD's scan plus AVARICE's redactor patterns. Names and lines only.

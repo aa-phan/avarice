@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "plan": "04-36",
+  "task": "Task 1 (tracer): pilot and full-evaluation dry runs with the spend projection",
+  "generatedAt": "2026-11-18T19:51:03Z",
+  "status": "ruling-recorded: authorize balanced-9, pilot 11.70, total 33.00. Pilot stopped after T01 (3 runs, 0.8853 USD): measured results in 04-36-evidence-eval.json under pilot, offlineJudgeProbe and unexpectedStop",
+  "measured": {
+    "setupUsd": { "A map": 0.07777, "A onboarding": 0.0739, "B onboarding": 0.07625, "C onboarding": 0.65742 },
+    "runCostUsd": "not measured: T01 A, B and C each ended blocked_on_decision with 0 tokens and 0.00 USD",
+    "planSpendUsd": 0.88534423,
+    "phase4SpentUsd": 4.812019,
+    "note": "the AC-14 derived figures held: fast-mode onboarding with a map or code index cost about 0.07 USD here (planned cap 0.60), and the knowledge pass on the portfolio cost 0.657 USD (the AC-14 measure 0.654)"
+  },
+  "spent": "nothing: only `node scripts/eval-retrieval.ts --dry-run`; no model started, AVARICE_LIVE not set",
+  "tasksFile": {
+    "path": "test/benchmark/phase4/eval-tasks.json",
+    "sha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+    "approvedBy": "Aaron Phan",
+    "approvedAt": "2026-11-16T18:47:56Z",
+    "tasks": 20,
+    "byRepository": { "aa-phan-portfolio-v2": "T01-T06", "auto_search_workflow": "T07-T15", "GroceriesGPT": "T16-T20" }
+  },
+  "ledger": {
+    "file": "test/containment/live-spend-phase4.jsonl",
+    "lines": 38,
+    "sha256": "1abdba4afc3d8b46251fc8b1938a80a08b8b4bca1e43f8507fa6ccd7ba807a6e",
+    "phase4SpentUsd": 3.926675,
+    "bySource": { "04-34": 0.18599, "04-35": 3.740685 },
+    "ceilingUsd": 40,
+    "remainingCeilingUsd": 36.073325,
+    "laterPlansWithLiveSpend": "none (04-37, 04-38, 04-39 are documentation and verification plans), so the whole remaining ceiling is available to plan 04-36"
+  },
+  "harnessBehaviour": {
+    "dryRunWritesOut": "no: --dry-run prints the plan and exits before writing --out, so this file is written by hand from the two dry-run outputs",
+    "wholePlanRefusal": "the harness refuses a plan whose CAP-BOUND total passes the remaining ceiling, even when the likely cost is far lower; every variant below must therefore also fit as a cap bound",
+    "resultsFile": "each live invocation rewrites --out from scratch; there is no skip, resume or append, so a pilot followed by a full run would run the pilot tasks again unless code is added",
+    "taskSelection": "--tasks N takes the first N approved tasks only; no task-id selector exists",
+    "onboardingCaps": "ONBOARD_CAP_USD (A 0.60, B 0.60, C 0.90) and MAP_CAP_USD (0.60) are constants, not flags; each onboarding runs `--mode fast` with costUsdPerInvocation = costUsdPerRun = the cap"
+  },
+  "pilot": {
+    "command": "node scripts/eval-retrieval.ts --dry-run --tasks 3 --out .planning/phases/04-profiles-retrieval-budgets-restricted-mode-and-the-portabili/04-36-pilot.json",
+    "exit": 0,
+    "plannedRuns": 9,
+    "perRunCapUsd": 0.4,
+    "runs": [
+      { "n": 1, "task": "T01", "arm": "A", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0.6 },
+      { "n": 2, "task": "T01", "arm": "B", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0 },
+      { "n": 3, "task": "T01", "arm": "C", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.9, "mapCapUsd": 0 },
+      { "n": 4, "task": "T02", "arm": "A", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0.6 },
+      { "n": 5, "task": "T02", "arm": "B", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0 },
+      { "n": 6, "task": "T02", "arm": "C", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.9, "mapCapUsd": 0 },
+      { "n": 7, "task": "T03", "arm": "A", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0.6 },
+      { "n": 8, "task": "T03", "arm": "B", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.6, "mapCapUsd": 0 },
+      { "n": 9, "task": "T03", "arm": "C", "size": "small", "repository": "aa-phan-portfolio-v2", "runCapUsd": 0.4, "onboardCapUsd": 0.9, "mapCapUsd": 0 }
+    ],
+    "projectionAtCap": { "runsUsd": 3.6, "onboardingUsd": 6.3, "armAMapUsd": 1.8, "mapParentsWithoutMap": 3, "totalUsd": 11.7, "fitsRemainingCeiling": true, "headroomAfterUsd": 24.373325 },
+    "caveat": "T01, T02 and T03 are all portfolio tasks, so the pilot sizes one repository only (the largest, with the largest knowledge corpus and the only one of the three that needs an arm A map at every parent besides GroceriesGPT)."
+  },
+  "full": {
+    "command": "node scripts/eval-retrieval.ts --dry-run",
+    "exit": 3,
+    "refusal": "Phase 4 spend 3.9267 plus this evaluation's cap 72.60 would pass the 40.00 USD ceiling (D-03); ask the owner",
+    "plannedRuns": 60,
+    "perRunCapUsd": 0.4,
+    "projectionAtCap": { "runsUsd": 24.0, "onboardingUsd": 42.0, "armAMapUsd": 6.6, "mapParentsWithoutMap": 11, "totalUsd": 72.6, "fitsRemainingCeiling": false, "overRemainingByUsd": 36.526675 },
+    "note": "11 of the 20 parents carry no .planning/codebase map: the 6 portfolio and 5 GroceriesGPT parents. The 9 auto_search_workflow parents carry one."
+  },
+  "measuredInputs": {
+    "source": "04-35-evidence-ac14.json, test/containment/live-spend-phase4.jsonl, 04-35-SUMMARY.md. AC-14 onboardings ran `--mode full` at the repository HEAD with a 0.8 USD per-invocation cap; the evaluation onboards each parent `--mode fast`. Fast-mode cost on these repositories has not been measured.",
+    "onboardingWithKnowledgePassFinalAttemptUsd": {
+      "aa-phan-portfolio-v2": 0.654371,
+      "auto_search_workflow": 0.974252,
+      "GroceriesGPT": 0.154992,
+      "spf13-cobra": 0.11158,
+      "BurntSushi-ripgrep": 0.166796
+    },
+    "knowledgeCorpusCap": "9 chunks at 0.8 USD per invocation (plan 04-35); also 9 at the evaluation's 0.9 USD cap",
+    "knowledgeSessionUsd": { "aa-phan-portfolio-v2 (6 chunks, attempt 1)": 0.302, "auto_search_workflow (12 chunks)": 0.7518, "note": "both from owner ruling 2 and 3 in the evidence file" },
+    "derivedMapAndIntelOnboardingUsd": {
+      "aa-phan-portfolio-v2": "about 0.12 (0.4252 attempt 1 total minus the 0.302 knowledge session)",
+      "auto_search_workflow": "about 0.22 (0.9743 minus 0.7518; this repository's map is regenerated in isolation)",
+      "GroceriesGPT": "about 0.12 (attempt 1 map invocation 0.1174; attempt 2 total 0.1550 with an 8-document knowledge pass)"
+    },
+    "restrictedRunUsd": 0.00484,
+    "tier3SingleCasesUsd": "0.0005 to 0.05",
+    "evaluationRunCostUsd": "NOT MEASURED. No evaluation-shaped run has been paid for. Phase 2 exit units averaged about 1.18 USD (3.5286 USD for three runs) and Phase 3 runs cost 0.8 to 1.2 USD each, on larger tasks than these 5 to 120 line fixes. The 0.40 USD cap may truncate runs (budget_exhausted), which the harness scores as no success."
+  },
+  "measuredInformedModel": {
+    "meaning": "Upper bound that keeps every run at its 0.40 USD cap (assumed) and replaces the onboarding and map caps with the AC-14 derived figures (measured, rounded up). It is still not a forecast: run cost is assumed, fast-mode onboarding is assumed no dearer than full-mode, and the parent-time knowledge corpus is assumed no larger than HEAD's (the 9-chunk cap bounds it).",
+    "setupPerArmUsd": {
+      "aa-phan-portfolio-v2": { "A": 0.26, "B": 0.13, "C": 0.654, "basis": "A = a map generation plus an onboarding of the repository that now carries the map (assumed, conservative); B derived; C measured" },
+      "auto_search_workflow": { "A": 0.22, "B": 0.22, "C": 0.974, "basis": "A has no map generation (parent carries a map) and reuses it (assumed); B derived; C measured" },
+      "GroceriesGPT": { "A": 0.26, "B": 0.13, "C": 0.155, "basis": "as the portfolio; C measured" }
+    },
+    "perTaskUsd": { "aa-phan-portfolio-v2": 2.24, "auto_search_workflow": 2.61, "GroceriesGPT": 1.75, "note": "setup for A, B and C plus three runs at 0.40" },
+    "risk": "Arm C's onboarding cap is 0.90 USD. auto_search_workflow's measured onboarding with the knowledge pass was 0.974 USD, above that cap, so arm C on an auto_search_workflow task would likely end onboarding-failed (the harness records success false and 0 tokens, which flatters arm C's token total). Raising ONBOARD_CAP_USD.C needs code."
+  },
+  "variants": [
+    { "id": "pilot-first-3", "what": "T01-T03, arms A B C (today's `--tasks 3`)", "runs": 9, "capBoundUsd": 11.7, "measuredInformedUsd": 6.73, "support": "supported" },
+    { "id": "pilot-spanning", "what": "T01, T07, T16, arms A B C (one task per repository)", "runs": 9, "capBoundUsd": 11.1, "measuredInformedUsd": 6.6, "support": "needs code: a task-id selector (`--task-ids`), or a derived tasks file (changes the approved digest; owner would have to approve the subset)" },
+    { "id": "full-20x3", "what": "all 20 tasks, 3 arms (the plan as designed)", "runs": 60, "capBoundUsd": 72.6, "measuredInformedUsd": 45.71, "support": "supported, but refused: exceeds the 36.07 USD remaining as a cap bound and as the measured-informed bound", "ceilingNeededUsd": { "toStartAtCapBound": 76.53, "toFinishMeasuredInformed": 49.64 } },
+    { "id": "full-20-arms-BC", "what": "all 20 tasks, arms B and C only", "runs": 40, "capBoundUsd": 46.0, "measuredInformedUsd": 32.87, "support": "supported (`--arms B,C`)", "con": "no arm A: verdict() returns pass false, 'arm A has no totals'; AC-8 stays unmeasured and only D-08 is decided. Cap bound still refused." },
+    { "id": "full-20x3-shared-AB", "what": "all 20 tasks, 3 arms, arms A and B share one onboarding (they differ only in adapters.context at run time)", "runs": 60, "capBoundUsd": 60.6, "measuredInformedUsd": 42.3, "support": "needs code: onboard once per task and run both arms against it", "con": "saves only B's onboarding (3.41 USD measured-informed); runs (24.00) and arm C's onboarding (13.47 USD measured-informed, of which about 10.1 is the knowledge pass) dominate; still does not fit" },
+    { "id": "full-20x3-runcap-0.25", "what": "all 20 tasks, 3 arms, `--cap-usd 0.25`", "runs": 60, "capBoundUsd": 63.6, "measuredInformedUsd": 36.72, "support": "supported", "con": "does not fit, and a lower cap truncates more runs" },
+    { "id": "first-N-6", "what": "first 6 tasks (all portfolio), 3 arms", "runs": 18, "capBoundUsd": 23.4, "measuredInformedUsd": 13.46, "support": "supported (`--tasks 6`)", "con": "one repository" },
+    { "id": "first-N-9", "what": "first 9 tasks (6 portfolio, 3 auto_search_workflow), 3 arms", "runs": 27, "capBoundUsd": 33.3, "measuredInformedUsd": 21.31, "support": "supported (`--tasks 9`)", "con": "no GroceriesGPT; the pilot would be re-run inside it (no resume)" },
+    { "id": "first-N-12", "what": "first 12 tasks (6 portfolio, 6 auto_search_workflow), 3 arms", "runs": 36, "capBoundUsd": 43.2, "measuredInformedUsd": 29.15, "support": "supported (`--tasks 12`)", "con": "cap bound refused (43.20 over 36.07); no GroceriesGPT. A first-N set reaches GroceriesGPT only at N 16 or more (cap bound 57.00)" },
+    { "id": "balanced-6", "what": "2 tasks per repository (T01 T04 T07 T10 T16 T17), 3 arms", "runs": 18, "capBoundUsd": 22.2, "measuredInformedUsd": 13.21, "support": "needs code (`--task-ids`)" },
+    { "id": "balanced-9", "what": "3 tasks per repository (T01 T04 T06 T07 T10 T13 T16 T17 T20), 3 arms", "runs": 27, "capBoundUsd": 33.3, "measuredInformedUsd": 19.81, "support": "needs code (`--task-ids`)", "note": "35.10 cap bound if arm C's onboarding cap is raised to 1.10", "sensitivityRunsAt0.20Usd": 14.41 },
+    { "id": "balanced-12", "what": "4 tasks per repository, 3 arms", "runs": 36, "capBoundUsd": 44.4, "measuredInformedUsd": 26.41, "support": "needs code (`--task-ids`)", "con": "cap bound refused (44.40 over 36.07)" },
+    { "id": "balanced-9-shared-AB", "what": "balanced-9 with arms A and B sharing one onboarding", "runs": 27, "capBoundUsd": 27.9, "measuredInformedUsd": 18.37, "support": "needs code (`--task-ids` and a shared onboarding)" },
+    { "id": "ceiling-change", "what": "raise the Phase 4 ceiling (D-03); the environment variable can only lower it, so this is a constant plus a recorded decision", "support": "owner decision and code", "con": "the full design needs about 49.6 USD measured-informed and 76.5 USD for the harness to start; D-03 allocated about 24 USD" }
+  ],
+  "ruling": { "reply": "authorize balanced-9 pilot 11.70 total 33.00.", "owner": "Aaron Phan", "repliedAt": "2026-11-19T04:47:08Z", "recordedIn": "04-36-evidence-eval.json" },
+  "recommendation": {
+    "note": "Claude's recommendation only; it is not a ruling and nothing here is authorized.",
+    "choice": "authorize, reduced to the balanced-9 task set, with stop conditions",
+    "tasks": ["T01", "T04", "T06", "T07", "T10", "T13", "T16", "T17", "T20"],
+    "pilotTasks": ["T01", "T07", "T16"],
+    "pilotCapUsd": 11.7,
+    "conditionalTotalCapUsd": 33.0,
+    "conditionalTotalCapEnforcement": "AVARICE_PHASE4_CEILING_USD set to 36.93 (3.9267 spent plus 33.00) for the evaluation, a lower-only mechanical guard; the remainder's cap bound (23.40) then fits only if the pilot spent 9.60 USD or less, otherwise the harness refuses and the plan returns to the owner",
+    "conditionalRemainderCapBoundUsd": 23.4,
+    "worstCaseTotalUsd": 35.1,
+    "measuredInformedExpectedUsd": 19.81,
+    "ceilingMarginUsd": 0.97,
+    "codeNeeded": "a `--task-ids` selector, a merge of the pilot results into the final results file, and ONBOARD_CAP_USD.C 0.90 to 1.10, each test first, in scripts/eval-retrieval.ts and its unit test",
+    "stopConditions": "stop and return to the owner if 6 or more of the 9 pilot runs end budget_exhausted, leave no branch to judge, or report a judging error; or if the remainder's cap bound does not fit the conditional total cap minus the pilot's measured spend",
+    "tradeOff": "AC-8's pass rule in eval-tasks.json says 'over the 20 tasks'; 9 tasks is a weaker test and needs the owner's written change to that rule."
+  }
+}

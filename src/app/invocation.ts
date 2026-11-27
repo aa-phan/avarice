@@ -12,16 +12,17 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
-import { INVOCATION_PURPOSES, PURPOSE_EXTENSIONS, computeInvocationScope, computeRunScope, runScopeDirs } from '../domain/invocation-scope.ts';
+import { INVOCATION_PURPOSES, PLANNING_READ_GLOB, PURPOSE_EXTENSIONS, computeInvocationScope, computeRunScope, runScopeDirs } from '../domain/invocation-scope.ts';
+import { isScopePath } from '../domain/mapping.ts';
 import type { InvocationScope } from '../domain/invocation-scope.ts';
 import { RootRefusedError } from '../domain/normalized-root.ts';
 import type { RunContract } from '../domain/run-contract.ts';
-import type { InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
-import type { OnboardingRow, RunRow, StepResultInput } from '../ports/ledger.ts';
+import type { InvocationDetails, InvocationOutcome, InvocationRequest, OnboardingPurpose } from '../ports/agent-host.ts';
+import type { OnboardingRow, RunRow, StepResultInput, StepResultRow } from '../ports/ledger.ts';
 import type { AppDeps } from './deps.ts';
 import { reserveInvocation, reserveRunInvocation, settleInvocation } from './budget.ts';
 import type { InvocationReservation, SettlementCharge } from './budget.ts';
-import { loadContract, stagingPathOf } from './stages/shared.ts';
+import { loadContract, loadMappingPlan, stagingPathOf } from './stages/shared.ts';
 
 const STORE = 'local';
 const RETENTION = 'onboarding';
@@ -52,6 +53,27 @@ export type PrepareOutcome = { granted: true; prepared: PreparedInvocation } | {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
+// Where GSD's inspect recorded the gsd-core and its agents for an onboarding. The one source of the invocation's read roots and of the absolute paths a
+// restricted map prompt names (plan 04-34), so the prompt can never name a path the hook policy does not admit.
+function gsdDirsRecorded(onboardingId: string, steps: readonly StepResultRow[]): Result<{ gsdCoreDir: string; agentsDir: string }> {
+  const inspected = steps.find((s) => s.step === 'gsd:inspect')?.result;
+  const gsdCoreDir = isObject(inspected) ? inspected['gsdCoreDir'] : undefined;
+  const agentsDir = isObject(inspected) ? inspected['agentsDir'] : undefined;
+  if (typeof gsdCoreDir !== 'string' || typeof agentsDir !== 'string') {
+    return err({ kind: 'internal', cause: `onboarding ${onboardingId} has no gsd:inspect step with the gsd-core directories` });
+  }
+  return ok({ gsdCoreDir, agentsDir });
+}
+
+// The directories in the form the hook policy holds them (its read roots are canonicalized), which is the form a model must be told to read.
+export function onboardingGsdDirs(deps: AppDeps, onboardingId: string): Result<{ gsdCoreDir: string; agentsDir: string }> {
+  const steps = deps.ledger.getStepResults(onboardingId);
+  if (!steps.ok) return steps;
+  const dirs = gsdDirsRecorded(onboardingId, steps.value);
+  if (!dirs.ok) return dirs;
+  return ok({ gsdCoreDir: canonical(dirs.value.gsdCoreDir), agentsDir: canonical(dirs.value.agentsDir) });
+}
+
 export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purpose: OnboardingPurpose, prompt: string, options: PrepareOptions): Result<PrepareOutcome> {
   const contract = loadContract(deps, onboarding.onboardingId);
   if (!contract.ok) return contract;
@@ -68,18 +90,29 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   const attempt = steps.value.filter((s) => s.step === step).length + 1;
 
   // What GSD's inspect recorded: where the gsd-core and its agents live, both readable to the invocation.
-  const inspected = steps.value.find((s) => s.step === 'gsd:inspect')?.result;
-  const gsdCoreDir = isObject(inspected) ? inspected['gsdCoreDir'] : undefined;
-  const agentsDir = isObject(inspected) ? inspected['agentsDir'] : undefined;
-  if (typeof gsdCoreDir !== 'string' || typeof agentsDir !== 'string') {
-    return err({ kind: 'internal', cause: `onboarding ${onboarding.onboardingId} has no gsd:inspect step with the gsd-core directories` });
-  }
+  const dirs = gsdDirsRecorded(onboarding.onboardingId, steps.value);
+  if (!dirs.ok) return dirs;
+  const { gsdCoreDir, agentsDir } = dirs.value;
 
   const project = deps.ledger.findProject({ projectId: onboarding.projectId });
   if (!project.ok) return project;
   if (project.value === null) return err({ kind: 'internal', cause: `onboarding ${onboarding.onboardingId} names an unknown project` });
   const workspace = deps.staging.describe(staging.value, contract.value.body.workspace.baseRevision);
   if (!workspace.ok) return workspace;
+
+  // A path-scoped map (a refresh of one area, ONB-11) reads its scope and the map directory only (T-04-35): the contract read scope the invocation is
+  // held to is narrowed to the planned paths, and the hook enforces it through the scope's read confinement. The stored contract is not changed.
+  const mappingPlan = purpose === 'map' ? loadMappingPlan(deps, onboarding.onboardingId) : ok(null);
+  if (!mappingPlan.ok) return mappingPlan;
+  // A paths plan that names no valid scope is refused, never read as the whole read scope: nothing was reserved, started or recorded (WR-10).
+  const scopePaths = mappingPlan.value?.mode === 'paths' ? mappingPlan.value.paths : undefined;
+  if (mappingPlan.value?.mode === 'paths' && !(scopePaths !== undefined && scopePaths.length > 0 && scopePaths.every(isScopePath))) {
+    return err({ kind: 'invalid', field: 'mapping:plan', reason: 'a path-scoped map names no valid scope path; it was not launched' });
+  }
+  const effectiveContract =
+    scopePaths !== undefined
+      ? { ...contract.value.body, files: { ...contract.value.body.files, read: [...scopePaths.map((path) => `${path}/**`), PLANNING_READ_GLOB] } }
+      : contract.value.body;
 
   // The scope is computed before the budget is reserved: computeInvocationScope refuses a work root that is not a normalized absolute
   // path (WR-01) by throwing a RootRefusedError, and a throw after the reservation would leave it unsettled. That refusal is a typed
@@ -89,11 +122,12 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
   try {
     scope = computeInvocationScope({
       purpose,
-      contract: contract.value.body,
+      contract: effectiveContract,
       stagingPath: staging.value,
       repoPath: project.value.repoPath,
       dataRoot: deps.profile.dataRoot,
       workRoot: deps.profile.workRoot,
+      profileRoots: deps.profile.otherRoots,
       home: deps.home ?? homedir(),
       workspace: workspace.value,
       // The scope drops them for the knowledge pass, which loads no skill and runs no GSD verb (decision B).
@@ -145,6 +179,12 @@ export function prepareInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
 }
 
 const clip = (text: string): string => (text.length <= MAX_RULE_CHARS ? text : text.slice(0, MAX_RULE_CHARS));
+
+// The AC-8 token metric of one invocation (A2): input, cache-creation, cache-read and output tokens summed. Undefined when the adapter reported none of the four.
+function tokensOf(d: InvocationDetails): number | undefined {
+  if (d.inputTokens === undefined && d.cacheCreationTokens === undefined && d.cacheReadTokens === undefined && d.outputTokens === undefined) return undefined;
+  return (d.inputTokens ?? 0) + (d.cacheCreationTokens ?? 0) + (d.cacheReadTokens ?? 0) + (d.outputTokens ?? 0);
+}
 
 // Whether the invocation was killed or interrupted, so what it cost is not known: the host's process ended by a signal or by our
 // wall clock, or the host adapter reports a timeout or a cancel that may have left the process running. An error that says
@@ -219,6 +259,9 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
       headBefore: o.headBefore,
       headAfter: o.headAfter,
       permissionDenials: o.permissionDenials.length,
+      // The digest of the redacted transcript is always recorded; the transcript itself only when it was stored (D-14).
+      ...(o.transcriptDigest !== undefined ? { transcriptDigest: o.transcriptDigest } : {}),
+      ...(o.transcriptSummaryArtifact !== undefined ? { transcriptSummary: o.transcriptSummaryArtifact } : {}),
       ...(o.transcriptArtifact !== undefined ? { transcript: o.transcriptArtifact } : {}),
     },
     nowMs: startedMs,
@@ -237,6 +280,18 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
       nowMs: deps.clock.nowMs(),
     });
     if (!artifact.ok) return artifact;
+  }
+  if (o.transcriptSummaryArtifact !== undefined) {
+    const summary = deps.ledger.recordArtifact({
+      digest: o.transcriptSummaryArtifact,
+      size: o.details?.transcriptSummaryBytes ?? 0,
+      kind: 'transcript-summary',
+      runId: request.runId,
+      retention: target.retention,
+      store: STORE,
+      nowMs: deps.clock.nowMs(),
+    });
+    if (!summary.ok) return summary;
   }
 
   const d = o.details;
@@ -265,7 +320,10 @@ function finishInvocation(deps: AppDeps, target: FinishTarget, outcome: Result<I
             hookDenies: d.hookDenies,
             hookBudgetDenies: d.hookBudgetDenies,
             numTurns: d.numTurns,
+            // The AC-8 token metric: the four usage counts summed. Present only when the host adapter measured them.
+            ...(tokensOf(d) !== undefined ? { tokens: tokensOf(d) } : {}),
             transcriptBytes: d.transcriptBytes,
+            ...(o.transcriptDigest !== undefined ? { transcriptDigest: o.transcriptDigest } : {}),
             ...(d.subtype !== undefined ? { subtype: d.subtype } : {}),
             ...(d.terminalReason !== undefined ? { terminalReason: d.terminalReason } : {}),
             ...(d.subagentsSpawned !== undefined ? { subagents: d.subagentsSpawned } : {}),
@@ -392,6 +450,7 @@ export function prepareRunInvocation(deps: AppDeps, run: RunRow, prompt: string,
       dataRoot: canonical(deps.profile.dataRoot),
       home: canonical(deps.home ?? homedir()),
       workRoot: canonical(deps.profile.workRoot),
+      profileRoots: deps.profile.otherRoots,
       scratchDir: join(canonical(scratchParent), 'scratch'),
       workspace: described.value,
       readRoots: [canonical(dirs.value.gsdCoreDir), canonical(dirs.value.agentsDir)],

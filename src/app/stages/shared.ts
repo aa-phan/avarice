@@ -4,6 +4,7 @@ import type { Result } from '../../domain/result.ts';
 import { FAST_MAP_FILES, FULL_MAP_FILES, MAPPING_MODES, requiredFilesFor } from '../../domain/mapping.ts';
 import type { MappingMode } from '../../domain/mapping.ts';
 import type { OnboardingContract } from '../../domain/onboarding-contract.ts';
+import type { AgentHost } from '../../ports/agent-host.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
 import type { StagingWorkspace } from '../../ports/staging-workspace.ts';
 import type { AppDeps } from '../deps.ts';
@@ -71,7 +72,20 @@ export interface StoredMappingPlan {
   mode: MappingMode;
   completeness: string;
   existingMap: string;
+  // What the workspace stage decided to do with the map the repository has (`existingMapOutcome`), and GSD's drift verdict in staging when it ran.
+  outcome?: string;
+  drift?: string;
   existingMapAnswer?: 'refresh' | 'update' | 'skip';
+  // Mode `paths` only: the scope the mapper is asked for.
+  paths?: string[];
+  // Present only for `onboard --restricted` (plan 04-24; CON-4, D-12): the map is made by the restricted host, and the record states it.
+  restricted?: true;
+}
+
+// The host that carries out an onboarding's invocations. A restricted onboarding is only ever handed to the restricted host, a contained one only to the contained host;
+// nothing here falls back from one to the other, so a deployment with no restricted host leaves a restricted onboarding with no host at all (T-04-66).
+export function hostOfOnboarding(deps: AppDeps, plan: StoredMappingPlan | null): AgentHost | undefined {
+  return plan?.restricted === true ? deps.restrictedHost : deps.host;
 }
 
 export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<StoredMappingPlan | null> {
@@ -85,11 +99,21 @@ export function loadMappingPlan(deps: AppDeps, onboardingId: string): Result<Sto
     return err({ kind: 'internal', cause: `onboarding ${onboardingId} has a mapping:plan step with no valid mode` });
   }
   const answer = body['existingMapAnswer'];
+  const paths = body['paths'];
+  // A path list with an entry that is not a string is a damaged plan: it is refused, never narrowed to the entries that are strings (WR-10).
+  if (mode === 'paths' && Array.isArray(paths) && !paths.every((p) => typeof p === 'string')) {
+    return err({ kind: 'invalid', field: 'mapping:plan', reason: 'a path-scoped map names an entry that is not a path; it was not launched' });
+  }
+  const drift = typeof body['drift'] === 'object' && body['drift'] !== null ? (body['drift'] as Record<string, unknown>)['verdict'] : undefined;
   return ok({
     mode: mode as MappingMode,
     completeness: typeof body['completeness'] === 'string' ? body['completeness'] : '',
     existingMap: typeof body['existingMap'] === 'string' ? body['existingMap'] : 'none',
+    ...(typeof body['outcome'] === 'string' ? { outcome: body['outcome'] } : {}),
+    ...(typeof drift === 'string' ? { drift } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
+    ...(Array.isArray(paths) ? { paths: paths as string[] } : {}),
+    ...(body['restricted'] === true ? { restricted: true as const } : {}),
   });
 }
 
@@ -98,6 +122,14 @@ export function effectiveMappingMode(deps: AppDeps, onboardingId: string, contra
   const plan = loadMappingPlan(deps, onboardingId);
   if (!plan.ok) return plan;
   return ok(plan.value === null ? contract.mapping.mode : plan.value.mode);
+}
+
+// The mode in force with the scope a `paths` map was asked for (validation states it as the coverage scope).
+export function effectiveMappingPlan(deps: AppDeps, onboardingId: string, contract: OnboardingContract): Result<{ mode: MappingMode; paths?: string[] }> {
+  const plan = loadMappingPlan(deps, onboardingId);
+  if (!plan.ok) return plan;
+  if (plan.value === null) return ok({ mode: contract.mapping.mode });
+  return ok({ mode: plan.value.mode, ...(plan.value.mode === 'paths' && plan.value.paths !== undefined ? { paths: plan.value.paths } : {}) });
 }
 
 // What the latest accepted validation recorded as step `validate`: the coverage label and scope the record states.
@@ -145,7 +177,7 @@ export async function stampMap(deps: AppDeps, onboardingId: string, staging: str
 }
 
 // The modes whose map AVARICE stamps after the mapper ran (`adopt` takes a map nobody ran, `skip` maps nothing).
-export const isStampedMode = (mode: MappingMode): boolean => mode === 'fast' || mode === 'full';
+export const isStampedMode = (mode: MappingMode): boolean => mode === 'fast' || mode === 'full' || mode === 'paths';
 
 // The map documents of an onboarding: the files the mapping plan requires (four for fast, seven for full), read from
 // staging. Another file under the map directory is not a map document (see extraMapFiles). An adopted map may carry

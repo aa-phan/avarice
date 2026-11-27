@@ -3,9 +3,13 @@
 //
 // The corpus holds the staging codebase map, `.planning/PROJECT.md`, `REQUIREMENTS.md` and `ROADMAP.md` when the
 // repository tracks them, every Markdown file under the ADR directories preflight found, and the files the
-// contract's `knowledge.documents` globs name (default `docs/**/*.md`). It never holds GSD phase files or
-// `.planning/STATE.md` (they churn; slice 3 adds phases), a file above the size cap, or a secret-bearing path.
-import { matchesAny, matchesGlob } from './glob.ts';
+// contract's `knowledge.documents` globs name (default `docs/**/*.md`). Since plan 04-17 it also holds the GSD phase files and
+// `.planning/STATE.md` (KNOWLEDGE_PLANNING_GLOBS): they churn, which is why the knowledge refresh re-extracts only the documents whose content
+// changed. It never holds a file above the size cap, a secret-bearing path, or a planning file the contract's read set does not allow. Since plan 04-35 (owner
+// ruling 2) it holds no more documents than one knowledge invocation can pay for: the chunk limit `knowledgeChunkLimit` derives from the invocation's cost cap
+// keeps the documents of the priority order that fit, and the rest are left out as `cost-cap`, named in the manifest and counted in the record.
+import { packDocuments } from './chunk-packing.ts';
+import { matchesAny } from './glob.ts';
 
 export const KNOWLEDGE_DIR = '.avarice-knowledge';
 
@@ -18,7 +22,7 @@ export const CORPUS_LIMITS = {
 // Tracked planning documents added when the repository has them. Order is priority order for the cap.
 export const PLANNING_DOCUMENTS: readonly string[] = ['.planning/PROJECT.md', '.planning/REQUIREMENTS.md', '.planning/ROADMAP.md'];
 
-export type CorpusDropReason = 'phase-file' | 'state-file' | 'too-large' | 'secret-path' | 'cap' | 'missing' | 'secret-content';
+export type CorpusDropReason = 'outside-read' | 'too-large' | 'secret-path' | 'cap' | 'cost-cap' | 'missing' | 'secret-content';
 
 export interface CorpusDrop {
   path: string;
@@ -39,7 +43,9 @@ export interface KnowledgeCorpusInput {
   documentGlobs: readonly string[];
   // Secret-bearing path globs of the contract.
   secretGlobs?: readonly string[];
-  limits?: { maxFileBytes?: number; maxFiles?: number };
+  // The contract's `files.read`: a planning document (KNOWLEDGE_PLANNING_GLOBS) is in the corpus only when it matches one of these. Absent: no restriction.
+  readGlobs?: readonly string[];
+  limits?: { maxFileBytes?: number; maxFiles?: number; maxChunks?: number };
 }
 
 export interface KnowledgeCorpusSelection {
@@ -48,8 +54,9 @@ export interface KnowledgeCorpusSelection {
   dropped: CorpusDrop[];
 }
 
-const PHASES = '.planning/phases/**';
-const STATE_FILE = '.planning/STATE.md';
+// GSD's own planning files: the phase plans, summaries and context documents, and the project state. Documents of the corpus like any other (plan 04-17,
+// ONB-15, S-47); the graph holds them as untrusted data, never as policy (T-04-46).
+export const KNOWLEDGE_PLANNING_GLOBS: readonly string[] = ['.planning/phases/**/*.md', '.planning/STATE.md'];
 
 // Every path the rules would admit before sizes are known, in priority order (map, planning documents, ADRs, other
 // documents; each group sorted), without duplicates. The stage stats exactly these.
@@ -61,6 +68,7 @@ export function knowledgeCandidates(input: Pick<KnowledgeCorpusInput, 'trackedPa
     PLANNING_DOCUMENTS.filter((path) => tracked.has(path)),
     [...tracked].filter(adr).sort(),
     [...tracked].filter((path) => matchesAny(path, input.documentGlobs)).sort(),
+    [...tracked].filter((path) => matchesAny(path, KNOWLEDGE_PLANNING_GLOBS)).sort(),
   ];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -78,17 +86,23 @@ export function knowledgeCandidates(input: Pick<KnowledgeCorpusInput, 'trackedPa
 export function selectKnowledgeCorpus(input: KnowledgeCorpusInput): KnowledgeCorpusSelection {
   const maxFileBytes = input.limits?.maxFileBytes ?? CORPUS_LIMITS.maxFileBytes;
   const maxFiles = input.limits?.maxFiles ?? CORPUS_LIMITS.maxFiles;
+  const maxChunks = input.limits?.maxChunks;
   const secretGlobs = input.secretGlobs ?? [];
   const kept: string[] = [];
   const dropped: CorpusDrop[] = [];
+  // The cost cap keeps a prefix of the priority order: once a document does not fit, it and every document after it that the other rules would keep is left out,
+  // so the corpus is never a patchwork of low-priority documents that happened to pack into a chunk with room.
+  let full = false;
   for (const path of knowledgeCandidates(input)) {
-    if (matchesGlob(path, PHASES)) dropped.push({ path, reason: 'phase-file' });
-    else if (path === STATE_FILE) dropped.push({ path, reason: 'state-file' });
+    if (input.readGlobs !== undefined && matchesAny(path, KNOWLEDGE_PLANNING_GLOBS) && !matchesAny(path, input.readGlobs)) dropped.push({ path, reason: 'outside-read' });
     else if (matchesAny(path, secretGlobs)) dropped.push({ path, reason: 'secret-path' });
     else if (input.sizes[path] === undefined) dropped.push({ path, reason: 'missing' });
     else if ((input.sizes[path] as number) > maxFileBytes) dropped.push({ path, reason: 'too-large' });
     else if (kept.length >= maxFiles) dropped.push({ path, reason: 'cap' });
-    else kept.push(path);
+    else if (full || (maxChunks !== undefined && packDocuments([...kept, path], input.sizes).length > maxChunks)) {
+      full = true;
+      dropped.push({ path, reason: 'cost-cap' });
+    } else kept.push(path);
   }
   return { paths: kept.sort(), dropped };
 }
@@ -129,3 +143,44 @@ export interface KnowledgeManifest {
 }
 
 export const copyPathOf = (sourcePath: string): string => `${KNOWLEDGE_DIR}/${sourcePath}`;
+
+// The documents of `current` a refresh has to extract: those `previous` does not have (new) and those whose content digest differs (changed). A document of
+// `previous` that `current` no longer has is gone and is not reported here. Order is that of `current`. Identity is the repository path and the content digest
+// decides, never the revision (every entry of a manifest carries the revision it was built at).
+export function changedDocuments(previous: KnowledgeManifest, current: KnowledgeManifest): KnowledgeManifestEntry[] {
+  const before = new Map(previous.entries.map((entry) => [entry.sourcePath, entry.sha256] as const));
+  return current.entries.filter((entry) => before.get(entry.sourcePath) !== entry.sha256);
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// The corpus is capped by cost (plan 04-35, owner ruling 2 of 2026-11-18, "A"; ONB-14, ONB-15)
+// ---------------------------------------------------------------------------------------------------------
+
+// The cost model of one knowledge invocation. The pass is one contained session that reads the chunks and writes one extraction file per chunk, so what it costs
+// grows with the chunk count and a corpus bigger than the session can pay for cannot finish: the classifier needs every chunk, and a session that stops early is
+// `no_progress`, one that overruns its cap is `budget_exhausted` and its written chunks are discarded. The AC-14 runs measured it (2026-11-18):
+//    6 chunks   0.302 USD   aa-phan-portfolio-v2, attempt 1 (stopped short of budget with 0.52 USD of the 0.80 USD cap unspent)
+//   12 chunks   0.7518 USD  auto_search_workflow (finished)
+//   12 chunks   0.8058 USD  aa-phan-portfolio-v2, attempt 2 (0.0058 over the 0.8 USD cap: budget_exhausted, all 12 chunk files lost)
+// Doubling the chunks multiplied the cost by about 2.6, not 2: every chunk a session reads makes each later turn dearer, because the context it carries grows. The first
+// calibration (plan 04-35, ruling 2) was linear (0.05 USD a chunk, 0.75 of the cap) and so put 12 chunks at 0.8 USD, which is the whole cap. The model is now a power law
+//   knowledgeSessionCost(n) = chunkUsd x n^exponent
+// fitted through (6 chunks, 0.30 USD) and (12 chunks, 0.7788 USD, the mean of the two 12-chunk sessions): exponent = log2(0.7788 / 0.30) = 1.376 and
+// chunkUsd = 0.30 / 6^1.376 = 0.0255. It reproduces the three measured points to within the spread of the two 12-chunk sessions (6 chunks 0.300, 12 chunks 0.779).
+// Only `capShare` of the per-invocation cap is planned for, 2/3, a margin of a third that covers the spread between sessions (the two 12-chunk sessions differ by 7 percent)
+// and the cap that also ends the run. The most chunks the corpus may plan to is the largest n with knowledgeSessionCost(n) <= costCapUsd x capShare, and never fewer than
+// one: n = floor((costCapUsd x capShare / chunkUsd)^(1 / exponent)). That is 9 chunks at the 0.8 USD cap of the AC-14 authorization (modelled 0.524 USD; the worst measured
+// session scaled to 9 chunks is 0.542 USD, 68 percent of the cap), 15 at 1.6 USD and 23 at the 3.0 USD default of the onboarding contract. It is monotone in the cap.
+// The cap is the knowledge invocation's own: the contract's per-invocation cost cap or what is left of the run's cost budget, the smaller (src/app/budget.ts), never a
+// constant of any one run.
+export const KNOWLEDGE_COST = { chunkUsd: 0.0255, exponent: 1.376, capShare: 2 / 3 } as const;
+
+// The modelled cost in USD of one knowledge session over `chunks` chunks.
+export const knowledgeSessionCost = (chunks: number): number => KNOWLEDGE_COST.chunkUsd * chunks ** KNOWLEDGE_COST.exponent;
+
+// 0 when no positive finite cap is left: a negative cap would make the formula NaN, which removes the corpus cap exactly when no budget is left (WR-05).
+export function knowledgeChunkLimit(costCapUsd: number): number {
+  if (!Number.isFinite(costCapUsd) || costCapUsd <= 0) return 0;
+  const fits = Math.floor((costCapUsd * KNOWLEDGE_COST.capShare / KNOWLEDGE_COST.chunkUsd) ** (1 / KNOWLEDGE_COST.exponent) + 1e-9);
+  return Math.max(1, fits);
+}

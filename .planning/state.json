@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.0",
+  "milestone": "v1.1 — MVP Completion",
   "phases": [
     {
       "number": "1",
@@ -21,7 +21,7 @@
     {
       "number": "4",
       "name": "Profiles, retrieval budgets, restricted mode and the portability proof",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "5",
@@ -42,12 +42,17 @@
       "number": "8",
       "name": "Cross-repository runs and project groups",
       "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "v1.0 tech-debt cleanup",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd-progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd-progress --next",
+    "label": "Advance to the next step (plan phase 5)",
+    "reason": "Phase 2 of 6 — needs a plan"
   },
-  "updated_at": "2026-11-15T23:56:21.287Z"
+  "updated_at": "2026-11-26T00:41:50.418Z"
 }

@@ -424,7 +424,8 @@ describe('onboarding through the real ClaudeHostAdapter and a fake claude', () =
   it('stores the transcript as an artifact only after redaction, and the invocation event carries counts, not text', () => {
     const secret = 'sk_live_4eC39HqLyjWDarjtT1zdp7dcREDACTME';
     const s = setup({ transcript: 'success', mapFiles: 'all', extraLines: [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: `the key is ${secret}` }] } })] });
-    assert.equal(onboard(s).code, 0);
+    // The whole redacted transcript is stored only on an opt-in (D-14): here the debug variable.
+    assert.equal(onboard(s, { AVARICE_DEBUG_TRANSCRIPTS: '1' }).code, 0);
     const [artifact] = rows<{ digest: string; size: number }>(s.roots, "SELECT digest, size FROM artifacts WHERE kind = 'transcript'");
     assert.ok(artifact, 'a transcript artifact is recorded');
     const hex = artifact.digest.replace('sha256:', '');
@@ -455,8 +456,8 @@ describe('fail closed before any process starts (SC3)', () => {
     assertBlockedBeforeLaunch(s, onboard(s, { AVARICE_HOOK_ENTRY: '/nonexistent/pre-tool-use.ts' }));
   });
 
-  it('blocks with enforcement_failure when claude reports a version that is not admitted', () => {
-    const s = setup({ version: '2.1.400 (Claude Code)', transcript: 'success', mapFiles: 'all' });
+  it('blocks with enforcement_failure when claude reports a minor that is not verified', () => {
+    const s = setup({ version: '2.2.0 (Claude Code)', transcript: 'success', mapFiles: 'all' });
     assertBlockedBeforeLaunch(s, onboard(s));
   });
 
@@ -686,13 +687,14 @@ describe('every containment layer is checked at launch, after the files are writ
   });
 
   it('records why the production host is the unavailable one, in the descriptor adapter_configs keeps', () => {
-    const s = setup({ version: '2.1.400 (Claude Code)', transcript: 'success' });
+    const s = setup({ version: '2.2.0 (Claude Code)', transcript: 'success' });
     onboard(s);
     const [host] = rows<{ adapter: string; descriptor_json: string }>(s.roots, "SELECT adapter, descriptor_json FROM adapter_configs WHERE port = 'agent-host'");
     assert.equal(host?.adapter, 'unavailable');
     const attributes = (JSON.parse(host?.descriptor_json ?? '{}') as { attributes: Record<string, string> }).attributes;
     assert.equal(attributes['enforcement'], 'none');
-    assert.equal(attributes['reason'], 'enforcement_failure:host-version-not-admitted:2.1.400');
+    // The cause, then how to ask for restricted mode (plan 04-23; D-12, S-22).
+    assert.equal(attributes['reason'], 'enforcement: restricted (enforcement_failure:host-minor-unverified); rerun with --restricted for analysis and planning only');
   });
 });
 
@@ -748,7 +750,7 @@ describe('the wall clock, the process group and the outcome kinds (ONB-8, CON-13
 
   it('reads stdout that arrives in small pieces, and keeps at most the transcript cap of it', async () => {
     const s = setup({ transcript: 'success', mapFiles: 'all', chunkBytes: 37 });
-    const run = await inProcess(s, { maxTranscriptBytes: 1500 });
+    const run = await inProcess(s, { maxTranscriptBytes: 1500, debugTranscripts: true });
     assert.equal(run.state, 'active', 'the result was parsed from all of the output, not only the kept part');
     const [artifact] = rows<{ digest: string; size: number }>(s.roots, "SELECT digest, size FROM artifacts WHERE kind = 'transcript'");
     assert.ok(artifact);
@@ -876,6 +878,7 @@ describe('ClaudeHostAdapter with a run owner (plan 02-08)', () => {
       dataRoot: roots.AVARICE_DATA_ROOT,
       home: join(roots.base, 'home'),
       workRoot: roots.AVARICE_WORK_ROOT,
+      profileRoots: [],
       scratchDir: scratch,
       workspace: {
         topLevelEntries: readdirSync(repo.path).filter((name) => name !== '.git'),

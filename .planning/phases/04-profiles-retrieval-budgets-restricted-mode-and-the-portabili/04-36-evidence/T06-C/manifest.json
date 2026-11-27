@@ -1,0 +1,113 @@
+{
+  "capBytes": 5242880,
+  "bytes": 3534011,
+  "files": [
+    {
+      "name": "decisions.jsonl",
+      "bytes": 0,
+      "rows": 0,
+      "total": 0,
+      "truncated": false
+    },
+    {
+      "name": "runs.jsonl",
+      "bytes": 1138,
+      "rows": 2,
+      "total": 2,
+      "truncated": false
+    },
+    {
+      "name": "work_items.jsonl",
+      "bytes": 887,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "attempts.jsonl",
+      "bytes": 236,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "run_steps.jsonl",
+      "bytes": 8380,
+      "rows": 17,
+      "total": 17,
+      "truncated": false
+    },
+    {
+      "name": "contracts.jsonl",
+      "bytes": 10301,
+      "rows": 2,
+      "total": 2,
+      "truncated": false
+    },
+    {
+      "name": "events.jsonl",
+      "bytes": 259079,
+      "rows": 474,
+      "total": 474,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/run-transcript-summary-46617891aeded68d.txt",
+      "bytes": 1806,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/run-transcript-9a552da29325b9e5.txt",
+      "bytes": 819266,
+      "rows": 285,
+      "total": 285,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-summary-586b489b4ddac230.txt",
+      "bytes": 1719,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-summary-cba39b268a9f898e.txt",
+      "bytes": 2043,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-summary-25cb05284ad7b1fb.txt",
+      "bytes": 156,
+      "rows": 1,
+      "total": 1,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-34fe20921fc6b940.txt",
+      "bytes": 344658,
+      "rows": 169,
+      "total": 169,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-42f5174e222cb3b8.txt",
+      "bytes": 256070,
+      "rows": 127,
+      "total": 127,
+      "truncated": false
+    },
+    {
+      "name": "transcripts/onboarding-transcript-dfacc2c424e6a45f.txt",
+      "bytes": 1828272,
+      "rows": 223,
+      "total": 223,
+      "truncated": false
+    }
+  ],
+  "truncated": [],
+  "absent": []
+}

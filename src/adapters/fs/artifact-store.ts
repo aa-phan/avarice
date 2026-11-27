@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -19,6 +20,7 @@ import { join } from 'node:path';
 import { err, ok } from '../../domain/result.ts';
 import type { PortError, Result } from '../../domain/result.ts';
 import type { ArtifactMeta, ArtifactStore } from '../../ports/artifact-store.ts';
+import type { CapabilityDescriptor } from '../../ports/capability.ts';
 
 // Seams for fault injection in tests; production uses the node:fs functions.
 export interface FsOps {
@@ -27,6 +29,13 @@ export interface FsOps {
 }
 
 const DIGEST = /^sha256:([0-9a-f]{64})$/;
+const MIB = 1024 * 1024;
+
+// The profile's artifact quota (plan 04-30; OPS-5, T-04-82): the most bytes of blobs the store holds, in MiB, and the profile the message names.
+export interface ArtifactQuota {
+  mib: number;
+  profile: string;
+}
 
 function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -38,13 +47,50 @@ function mapFsError(action: string, error: unknown): PortError {
   return { kind: 'internal', cause: `${action}: ${code ?? (error instanceof Error ? error.message : String(error))}` };
 }
 
+// One key per ArtifactStore method, so a method added to the port cannot go undeclared; `contentAddressed` is the port's identity rule (the digest is the SHA-256 of the bytes).
+const LOCAL_CAPABILITIES: Record<Exclude<keyof ArtifactStore, 'descriptor'>, true> & { contentAddressed: true } = { put: true, get: true, has: true, contentAddressed: true };
+
 export class LocalArtifactStore implements ArtifactStore {
+  readonly descriptor: CapabilityDescriptor = { port: 'artifact-store', adapter: 'local-fs', version: '1.0.0', capabilities: { ...LOCAL_CAPABILITIES }, offline: true };
   private readonly root: string;
   private readonly ops: FsOps;
+  private readonly quota: ArtifactQuota | undefined;
+  // The bytes the blob directory holds, counted from the disk at the first put that needs it and kept up to date by this store's own writes. A command that only reads never
+  // counts. Another process's writes since that count are not seen until the next process starts, so the quota stops runaway growth; it is not an exact ledger of bytes.
+  private total: number | undefined;
 
-  constructor(dataRoot: string, ops: Partial<FsOps> = {}) {
+  constructor(dataRoot: string, ops: Partial<FsOps> = {}, quota?: ArtifactQuota) {
     this.root = join(dataRoot, 'artifacts');
     this.ops = { fsyncSync: ops.fsyncSync ?? fsyncSync, renameSync: ops.renameSync ?? renameSync };
+    this.quota = quota;
+  }
+
+  // The sizes of the stored blobs (`<root>/<2 hex>/<64 hex>`); a temporary file of a write in progress is not a blob.
+  private measure(): number {
+    let sum = 0;
+    let shards: string[] = [];
+    try {
+      shards = readdirSync(this.root);
+    } catch {
+      return 0;
+    }
+    for (const shard of shards) {
+      let names: string[] = [];
+      try {
+        names = readdirSync(join(this.root, shard));
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        if (!/^[0-9a-f]{64}$/.test(name)) continue;
+        try {
+          sum += statSync(join(this.root, shard, name)).size;
+        } catch {
+          // removed while counting
+        }
+      }
+    }
+    return sum;
   }
 
   private pathFor(hex: string): { dir: string; file: string } {
@@ -70,6 +116,11 @@ export class LocalArtifactStore implements ArtifactStore {
       // Not stored yet.
     }
 
+    // A new blob that would take the store past its quota is refused before anything is written (OPS-5): the caller is told, and stores no record that points at it.
+    if (this.quota !== undefined) {
+      this.total ??= this.measure();
+      if (this.total + bytes.length > this.quota.mib * MIB) return err({ kind: 'unavailable', cause: `artifact quota of ${this.quota.mib} MiB reached for profile ${this.quota.profile}` });
+    }
     const temp = join(dir, `.tmp-${hex.slice(0, 12)}-${process.pid}-${randomUUID()}`);
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -86,6 +137,7 @@ export class LocalArtifactStore implements ArtifactStore {
       rmSync(temp, { force: true });
       return err(mapFsError('artifact put', error));
     }
+    if (this.total !== undefined) this.total += bytes.length;
     // Make the rename durable; a failure here cannot undo a published blob, so it is not an error.
     try {
       const dirFd = openSync(dir, 'r');

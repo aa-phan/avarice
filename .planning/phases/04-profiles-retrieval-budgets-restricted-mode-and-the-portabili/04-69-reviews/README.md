@@ -1,0 +1,221 @@
+# Plan 04-69 documentation review records
+
+Status: complete. Rounds 1, 2 and 3 ran and both groups failed each time. The findings of rounds 1 and 2 were fixed (see the dispositions). The owner authorized a scoped round 4 on 2026-11-25 (see Owner decisions). The four round-3 WARNINGs (A-W1, A-W2, B-W1, B-W2) were fixed in commit `fdde37f`, each checked against the code at HEAD (see the dispositions of round 3). Round 4 passed for both groups: `round-4-A.md` for group A and `round-4-B.md` for group B, each with 0 BLOCKER and 0 WARNING within scope and every current digest matching. All ten documents are marked `reviewed` in `docs/system/coverage.md`, naming their round files. The round-3 NITs stay open by the owner's decision.
+
+Code under review: `3a6c10c` (the last commit that touched `src`, `scripts`, `bin` or `test`; the last `src` commit is `2bd1e03`). Documents under review: the changes of plans 04-56 to 04-68 to `docs/system/`, as `git diff 96a0718..HEAD -- docs/system` shows for each file. The version to review in round 1 is the one with the round 1 digest below (HEAD `b07b088`). The version to review in round 2 is the one with the round 2 digest (the documents as at commit `21ae2eb`). The version to review in round 3 is the one with the round 3 digest (the documents as at commit `d38f5ea`; the commit that records the digests only changes this file).
+
+`findings.md` is a log and is exempt from prose review by the owner's decision of 2026-11-23 (`04-54-reviews/README.md`, decision 2); that exemption is kept. Its changed lines are checked against their `file:line` by the plan's acceptance criteria, not by a prose round.
+
+## Review groups
+
+Groups follow `04-68-doc-worklist.md`. `README.md` changed in Task 1 of this plan (one counterparts row) and joins group B, so that its status is backed by a review.
+
+| Group | Document | sha256 reviewed in round 1 | sha256 to review in round 2 | sha256 to review in round 3 | Reviewer checks against the code |
+|---|---|---|---|---|---|
+| A | `policy-and-approvals.md` | `aee16bfa541f30941072cdd159c8ab285c1dd0e37a13210c612cc3612a2eeeb3` | `2919db2ef1e41ae901dce90f54254e476e125dbe641ceeea6d6112fe8c26b3e0` (changed) | `ed2bc30336e554da773ddfedc703be5f1a11b20cebe1c20222c9b490d13bfa7b` (changed) | the classifier's wrappers, launchers, string forms and residual list; the refusal cases; the unshowable-value conditions and caps (`src/domain/privileged-commands.ts`, `src/domain/approval.ts`, `src/hook/pre-tool-use.ts`, `src/domain/hook-decision.ts`, `src/domain/enforcement-map.ts`) |
+| A | `containment.md` | `f482d11fff951cec5e5109c9854f3daefb564e2265d231bbfff7d463b8834caa` | `0bdf47a8b35b064e614ad8fe2bc90d336c260a591e83d0a4a069c0e2234b6d16` (changed) | `0bdf47a8b35b064e614ad8fe2bc90d336c260a591e83d0a4a069c0e2234b6d16` (unchanged) | the restricted patch, the corrupt-config whole-root denial, the brace-glob reason, the events the hook records (`src/adapters/fs/profile-registry.ts`, `src/domain/privileged-commands.ts`, `src/hook/pre-tool-use.ts`) |
+| A | `diagrams/approve-privileged-action.puml` | `ef09bc83cf5a77b3df4f3826ffb0bcacda6a6767b56ee034011082db19f88a15` | `ef09bc83cf5a77b3df4f3826ffb0bcacda6a6767b56ee034011082db19f88a15` (unchanged) | `0f5cfa1268c1d34cce59eaef66dec72e6d3b93deab3aa00ddb29a46a61e4524e` (changed) | read with `processes.md` |
+| A | `processes.md` (approve flow, steps 2 to 4) | `d329315f11e8e047e666d34fcf2952382b2be0371be46d99ed474e0c6890ac51` | `d329315f11e8e047e666d34fcf2952382b2be0371be46d99ed474e0c6890ac51` (unchanged) | `d329315f11e8e047e666d34fcf2952382b2be0371be46d99ed474e0c6890ac51` (unchanged) | the approve steps against the hook and the `approve` command |
+| A | `cli-reference.md` (approve, context `items` row) | `a9a8093a44d1f9016ec1faba98e0342edfb878be677b702e462399a084a1f451` | `30cd0bba18f5b7f305739bfa1f0378e813e1011679de2096e58a68a7902d66fc` (changed) | `30cd0bba18f5b7f305739bfa1f0378e813e1011679de2096e58a68a7902d66fc` (unchanged) | `src/cli/commands/approve.ts`, `src/cli/commands/context.ts`, the item `format` field |
+| A | `data-model.md` (config home row, `policy.denied` row) | `25c4fcf61c9cf74cad6a01dd263333b7bddac54fc2316e4727b03b74e4ad7daf` | `295bccd9f773b3eed6776aa42425f3da4623386395f3ad60a1c1fb6a69393d14` (changed) | `f1badee031dc5cf7bee8d7db7468c53d5da798fd835df7996d775b686b663cbc` (changed) | the event data of `policy.denied` and the bindings lock rules; must say the same as `profiles-and-credentials.md` |
+| B | `runs.md` (restricted runs, run end and patch) | `3fe2166132fab036a22a554a139386d2ea9b864186ff1b32c767f06ef32af879` | `3fe2166132fab036a22a554a139386d2ea9b864186ff1b32c767f06ef32af879` (unchanged) | `3fe2166132fab036a22a554a139386d2ea9b864186ff1b32c767f06ef32af879` (unchanged) | the patch's exclusion lists (`excludePaths`), in-scope edits kept |
+| B | `profiles-and-credentials.md` | `430857d04a34524798acc573fe9df322dc6e3ed62cafc00651842ecb38e6321d` | `94bb704271049420affa5d9d23ed4f83649f604a9770c94e259f138bcf01cbee` (changed) | `d1dfa303f68a07902d39545da1ec178a23db6bf710ff09670db6743b1165f368` (changed) | the lock's four takeover cases against `lockIsStale`, the 2-second margin and the 60-second fallback (`src/adapters/fs/profile-bindings.ts`); the registry's whole-root denial (`src/adapters/fs/profile-registry.ts`) |
+| B | `integrations.md` (`ps` row, Run workspace Patch, failure table) | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` (unchanged) | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` (unchanged) | the lock holder's start read through `ps`; the run workspace `excludePaths` |
+| B | `indexes-and-context.md` (Reuse and access) | `56d118c0b317c4416ab4f803dbc3e722400839ef27af5826b57304b99c14ae31` | `56d118c0b317c4416ab4f803dbc3e722400839ef27af5826b57304b99c14ae31` (unchanged) | `7ccb4f4f4a71821c081f5d79cff57ebaa2cc00af3f46cc3891cd67e432b6d886` (changed) | the order of the five cache misses, the item `format`, when it is raised (`src/app/run-stages/item.ts`, `src/app/context.ts`) |
+| B | `README.md` (ADR-017 counterparts row) | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` (unchanged) | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` (unchanged) | the row against `docs/decisions/ADR-017-ac8-brief-coverage.md` and `findings.md` |
+
+Each reviewer should read every sentence that states a limit (2 seconds, 60 seconds, 1 second for `ps`, 1 MiB, 440 characters, 80 characters, 400 characters, 512 characters, 16 prefix words) against the constant in the code.
+
+Round budget: at most three rounds per group, each by a fresh reviewer that has not seen an earlier round; the owner added one scoped round 4 (see Owner decisions). Each report is stored verbatim as `round-<n>-<group>.md`. A group passes when its last round records no BLOCKER and no WARNING. A document is marked `reviewed` in `coverage.md` only after its group passed, naming the round file. An edit after a passing round voids the verdict.
+
+## Owner decisions
+
+Recorded 2026-11-25 by the owner, Aaron Phan, answering the checkpoint raised after round 3.
+
+1. Review budget: "Fix + scoped round 4". Fix A-W1, A-W2, B-W1 and B-W2 with the reviewers' suggested wording, checked against the code at HEAD. Then one fresh round-4 review per group, scoped to the lines changed since the round-3 digests (diff base `08db6a5`, the HEAD the round-3 reviewers read). A group passes when round 4 records no BLOCKER and no WARNING within that scope. Only then are its documents marked `reviewed`; otherwise they stay `changed after review` and the owner decides, with no automatic round 5.
+2. The round-3 NITs (A-N1 to A-N6, B-N3 to B-N5) are not applied and stay open.
+
+## Review rounds
+
+| Round | Group | Report | Verdict | Found and done |
+|---|---|---|---|---|---|
+| 1 | A | `round-1-A.md` | FAIL: 1 BLOCKER, 1 WARNING, 4 NITs | See the dispositions below |
+| 1 | B | `round-1-B.md` | FAIL: 1 WARNING, 3 OBS | See the dispositions below |
+| 2 | A | `round-2-A.md` | FAIL: 1 WARNING, 4 OBS | See the dispositions of round 2 |
+| 2 | B | `round-2-B.md` | FAIL: 1 WARNING, 2 OBS, 1 out-of-scope note | See the dispositions of round 2 |
+| 3 | A | `round-3-A.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 6 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
+| 3 | B | `round-3-B.md` | FAIL: 0 BLOCKER, 2 WARNINGs, 3 NITs | WARNINGs fixed in `fdde37f`, NITs open; see "Dispositions of round 3" |
+| 4 | A | `round-4-A.md` | PASS: 0 BLOCKER, 0 WARNING, 0 NIT within scope | Scoped by the owner; report committed unchanged in `8064176`; documents marked `reviewed` |
+| 4 | B | `round-4-B.md` | PASS: 0 BLOCKER, 0 WARNING, 0 NIT within scope | Scoped by the owner; report committed unchanged in `8064176`; documents marked `reviewed` |
+
+Outcome by group: group A ended FAIL after three rounds (round 1 one BLOCKER and one WARNING, round 2 one WARNING, round 3 two WARNINGs) and passed the owner-scoped round 4. Group B ended FAIL after three rounds (one WARNING in each) and passed the owner-scoped round 4. Every document of both groups is marked `reviewed`.
+
+### Dispositions of round 1
+
+Each fix was checked against the code at HEAD, not against a proposal. Commit `21ae2eb` holds all of them.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| A-F1: `cli-reference.md` says a corrupt profile configuration is skipped | BLOCKER | Fixed. The sentence now says a configuration that is corrupt, or that the system refuses to open, does not stop the command and has the whole root of its profile denied. Checked against the registry, which handles a refused read and an `invalid` read in one branch that adds the whole root. The corrupt-configuration kinds in `containment.md` now also list a file that is not regular, as the registry's read does. |
+| A-F2: changed sentences over the 35-word cap | WARNING | Fixed. All listed sentences in `policy-and-approvals.md`, `containment.md` and `cli-reference.md` were split, and the sentences those splits produced were counted again. A script over every added line of all ten documents since `96a0718` (table rows excluded) finds no sentence over 35 words. |
+| A-F3: alias reason says "the owner can run the command it stands for"; `trap` rule omits `-l` | NIT | Fixed. The reason is now described as asking for the command it stands for to be run, as the code text does. The `trap` rule now says it runs nothing when an option such as `-p` or `-l` comes first, as `trapString` returns nothing for any option-led first operand. |
+| A-F4: map row omits the unlisted npm option that the residual list names | NIT | Fixed. The `privileged-approval` row now lists it, the sentence under the table says the code table's text names neither this nor the unshowable-value case, and the existing `findings.md` line for that row now records the npm option too. |
+| A-F5: lock rule omits the unparseable lock time | NIT | Fixed in `data-model.md` and `profiles-and-credentials.md` (and its Quirks bullet), with the wording of B-OBS2. |
+| A-F6: "the code table's own text is older" narrates history | NIT | Fixed. The sentence says the code table's text differs and points to `findings.md`. |
+| B-1: three sentences over 35 words in `profiles-and-credentials.md` | WARNING | Fixed. The list of left-out entries, the corrupt and refused cases, and the "what stays open" sentence were split, and each new sentence is at most 35 words. |
+| B-OBS2: "a holder that cannot be read" is ambiguous; unparseable time not named | OBS | Fixed in both documents. The second takeover case reads "a lock whose text does not name a process and a time". The 60-second case now also covers a lock time that is not a date, as `lockIsStale` does. |
+| B-OBS3: label matching of the multi-item prompt is looser in the code | OBS | Not fixed. The sentence is correct for the plain form and does not overstate it; it is outside the restricted-run scope of this plan. |
+| B-OBS4: the first cache miss is narrower in the text than in the code | OBS | Not fixed. The reviewer confirms the built behavior matches the text (no entry sets `answer`), so the text is correct for what runs. |
+
+Group B's round 1 verdict recorded no finding against `runs.md`, `integrations.md`, `indexes-and-context.md` or `README.md`, and group A's none against the diagram or `processes.md`. These six are unchanged since round 1. A round 2 reviewer may skip them if the orchestrator accepts the round 1 verdict for unchanged documents, and must read the changed ones in full.
+
+### Dispositions of round 2
+
+Each fix was checked against the code at HEAD, not against a proposal. Commit `d38f5ea` holds all of them.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| A-W1: the bindings lock rule is stated in full in `data-model.md` and `profiles-and-credentials.md`, and `data-model.md` omits the lock that names the process looking at it | WARNING | Fixed by keeping the rule in one home. The `data-model.md` Config home cell now says what the lock file holds and links to `profiles-and-credentials.md#selecting-a-profile`, which carries the four takeover cases (including the lock naming the live writer itself, `processAlive` in `profile-bindings.ts`). The Quirks bullet of `profiles-and-credentials.md`, the third version of the rule, is now a pointer to that section. The reviewer's "data-model.md:120" is the Quirks bullet of `profiles-and-credentials.md` at line 120; line 120 of `data-model.md` holds no lock text. |
+| A-OBS1: the profile-isolation row says "only the default roots" | OBS | Fixed. The row says that profile's directory and the default roots of its name are denied, as `wholeRootOf` returns. |
+| A-OBS2: "first such command" reads as the first unshowable command | OBS | Fixed in the diagram (the branch condition is about the first privileged command's values, and the action says "that command") and in `policy-and-approvals.md` ("A line whose first privileged command has bound values that cannot be shown..."). Checked against `classified.commands[0]` in `hook-decision.ts`. |
+| A-OBS3: the code table's wrapper list omits `builtin`, not in `findings.md` | OBS | Fixed in `findings.md` only. `builtin` is in `WRAPPERS` at `privileged-commands.ts:557` (the reviewer cited line 564, which is `stdbuf`) and absent from the text at `enforcement-map.ts:97`. |
+| A-OBS4: pronoun and split wrapper list in `policy-and-approvals.md` | OBS | Partly fixed. The pronoun now reads "The classifier also ignores...". The two wrapper sentences are not merged: the merged list is 36 words, over the 35-word cap. |
+| B-W1: `indexes-and-context.md` states the superseded 4-of-6 success counts | WARNING | Fixed. The paragraph now says the knowledge pass was ahead of the code-only arm on successes, 3 of 6 against 2 of 6, treats a run that skipped part of its brief as partial, keeps the 6.2% and seven-times figures, and cites ADR-017 beside ADR-015. Checked against ADR-017 decisions 5 and 7 (arm B 2, arm C 3; tokens 94.4% and 88.5% of A, so C used 6.2% fewer than B). |
+| B-OBS2: "the selected profile's own configuration" holds only in the configuration home in use | OBS | Fixed with the reviewer's wording. Checked against `profile-registry.ts:78`. |
+| B-OBS3: the retry report lists only items of the earlier pack | OBS | Fixed in both sentences of the paragraph ("Everything in the earlier pack that is not reused is read again"; "lists each item of the earlier pack that it read again"). |
+| B out-of-scope note: ADR-017 says "Date 2026-11-23" and, in decision 2, approval on 2026-11-25 | Note | Not edited: an accepted ADR is never rewritten. Recorded as an open item for the owner in the plan summary. |
+
+The sweep of every line added to `docs/system/` since `96a0718` (table rows excluded) finds no banned dash and no sentence over 35 words in the ten reviewed documents. Three over-cap items remain in `coverage.md`, a ledger outside the review groups. `findings.md` is exempt from prose review (see above).
+
+## Open after round 3
+
+Round 3 was the last round allowed. The plan's fallback applies: no `docs/system/` document was edited after round 3, because an edit that no fresh reviewer has read would be an unreviewed fix. Every item below is open, with the reviewer's location, code evidence and suggested fix as the reports `round-3-A.md` and `round-3-B.md` record them. The owner decides whether to authorize a scoped round 4 (the precedent is round 4 of plan 04-54, scoped by the owner to the changed lines).
+
+The digests the documents had when round 3 ran are in the table under "Review groups". The owner then authorized a scoped round 4 (see Owner decisions); the WARNINGs below were fixed afterwards in commit `fdde37f`, so the round-4 digests differ for the two documents that changed.
+
+### Group A, WARNINGs
+
+**A-W1 (WARNING, confidence high). The gate's step list omits the unshowable-values denial and contradicts the paragraph above it.**
+- Location: `docs/system/policy-and-approvals.md:86`, "6. With no source, the action is denied with the rule `approval-required:` and the request ID, and the message names the command the owner runs."
+- Defect: the list is introduced as "It runs in this order". The gate has a step between 5 and 6 that the list never mentions. Parameters that cannot be shown whole are denied with `privileged:unapprovable` and no request. Step 6 says every sourceless action gets `approval-required:`. That contradicts the Parameters and digest paragraph at line 65.
+- Code evidence: `src/app/authorize.ts:159-162` returns `UNAPPROVABLE_RULE` before the pending-request lookup at `:164`. `src/app/authorize.ts:154-157` shows that a contract or an approval already on record still allows the action first. The code comment at `src/app/authorize.ts:11-12` states the order.
+- Suggested fix, verbatim: "insert a step before step 6. For example: "If the parameters cannot be shown to the owner whole (see Parameters and digest), the action is denied with the rule `privileged:unapprovable` and no request is written." Then make step 6 start "Otherwise"."
+
+**A-W2 (WARNING, confidence high). The "cannot be checked" reason texts are stated as if both modes give them, but a run gives the generic shell-syntax text.**
+- Location: `docs/system/policy-and-approvals.md:122` (git alias or config include bullet) and `:123` (brace expansion or glob bullet). Quotes: "The reason says the line defines a git alias or a config include, which cannot be checked, and asks for the command it stands for to be run." and "The reason says a brace expansion or a glob decides which command runs and asks for the command written without it."
+- Defect: these bullets sit under "Three outcomes", which applies to a run and to an attended session. Only an attended session shows the classifier's reason to the agent. A run converts any unreadable line to `shell-syntax` and gives the fixed shell-syntax reason. The agent in a run is never told about the alias or the brace expansion.
+- Code evidence: `src/domain/hook-decision.ts:820-821` (`classified.kind === 'unparseable'` returns `refuse('shell-syntax')`). `src/domain/run-shell-rules.ts:35-36` (the reason is "one plain command per call, written without ..."). Attended: `src/hook/pre-tool-use.ts:659` appends the classifier reason in parentheses.
+- Suggested fix, verbatim: "scope both sentences, for example "In an attended session the reason says ...; a run denies the line as `shell-syntax` with that rule's own reason." The same scoping applies to the other reasons in the list."
+
+### Group A, NITs
+
+**A-N1 (NIT, confidence medium). "The rule over-refuses in two places" undercounts.**
+- Location: `docs/system/policy-and-approvals.md:125`.
+- Defect: the code refuses in more cases than the two named. A shell or `su` command with a brace word that begins with `{` or `-` is refused (`bash {a,b}.sh` is refused, `bash scripts/{a,b}.sh` is not; the reviewer ran `classifyLine` read-only to confirm both). The same holds for an `su` or `watch` option word, and for `find`, which the text names. The text also says the words in "the arguments of any other program" are not refused; a shell operand of that form is refused.
+- Code evidence: `src/domain/privileged-commands.ts:1066-1072` and `:1081-1085` (`formsOption`, applied to shells and `su`), and `:1026-1029`.
+- Suggested fix, verbatim: ""The rule also over-refuses, for example: ..." and add the shell and `su` case. Or drop the count."
+
+**A-N2 (NIT, confidence medium). "Such a line is refused." is detached from its list.**
+- Location: `docs/system/policy-and-approvals.md:127`.
+- Defect: after the six-bullet list comes a long paragraph on expansion words. The sentence that states the outcome of "cannot be checked" sits below that paragraph, and "Such a line" is ambiguous.
+- Suggested fix, verbatim: "move "A line that cannot be checked is refused. No limit and no failure to read is taken as 'not privileged'." directly under the "Three outcomes" lead, before the bullets."
+
+**A-N3 (NIT, confidence medium). The same moved-root denial fact has three homes, with no link from `containment.md`.**
+- Location: `docs/system/containment.md:185` (the corrupt-configuration definition and the whole-root definition) and the "Another profile's roots" bullet in the limits section; `docs/system/cli-reference.md:68`.
+- Defect: the owner is `docs/system/profiles-and-credentials.md`, "Moved-root denial" and "What stays open". The definition of a corrupt configuration is restated word for word in three documents. `containment.md` links only `profiles-and-credentials.md#redaction`, not `#roots-and-isolation`. The restatements are accurate today but can drift.
+- Suggested fix, verbatim: "keep the consequence each document owns (exit 70 in the CLI reference, the sandbox denial in containment) and link to `profiles-and-credentials.md#roots-and-isolation` for the definition of corrupt and unreadable."
+
+**A-N4 (NIT, confidence low). The list of what makes a configuration corrupt is not exhaustive.**
+- Location: `docs/system/containment.md:185`, `docs/system/profiles-and-credentials.md` (Moved-root denial), `docs/system/cli-reference.md:68`.
+- Defect: "(not valid JSON, a refused key, a symbolic link, a file that is not regular, or over the size cap)" reads as the full list. Other `invalid` outcomes also deny the whole root: the file is not a JSON object, the schema is not 1, the `profile` field names another profile, and a root value of the wrong shape.
+- Code evidence: `src/domain/profile.ts:166-182` and `:138-143`; `src/adapters/fs/profile-config.ts:51-65`. The registry denies the whole root for any `invalid` error at `src/adapters/fs/profile-registry.ts:82`.
+- Suggested fix, verbatim: "add "or any other refusal by the configuration parser", or say "for example"."
+
+**A-N5 (NIT, confidence low). "Record something" is ambiguous in the manual-equivalents section.**
+- Location: `docs/system/policy-and-approvals.md:222`, "Three commands record something: `context add`, `evidence add` and `pr record`."
+- Defect: `approve` also writes (an approval) and is listed in the same table. The sentence "they need no terminal" is what separates the three from `approve`, but the lead does not say so.
+- Suggested fix, verbatim: ""Three commands record manual input: ..."."
+
+**A-N6 (NIT, confidence low). Two small term and detail points.**
+- `docs/system/cli-reference.md` (approve output) says "shown in full" where `policy-and-approvals.md` says "shown whole". Use one term.
+- `docs/system/policy-and-approvals.md:65` says the refusal reason "names the key and its length". For an over-long key the code names "a parameter name", not the key (`src/domain/approval.ts:109`).
+- The reviewer gave no separate suggested fix; the first point is "Use one term".
+
+### Group B, WARNINGs
+
+**B-W1 (WARNING, confidence high): dangling cross-reference after a heading rename.**
+- Location: `docs/system/indexes-and-context.md:138`. Quote: "The `knowledge` object of the record gains a `corpusCap` object when the cap left something out (see "What the record states")".
+- Problem: the sections "What the record states" were renamed to "Code graph record fields" (line 72) and "Knowledge record fields" (line 212). No heading named "What the record states" exists any more. A grep of `docs/system` finds the old title only at this line.
+- Evidence: the heading list of the file. The `corpusCap` field is described under "Knowledge record fields" (line 212).
+- Suggested fix, verbatim: "change the reference to `(see [Knowledge record fields](#knowledge-record-fields))`."
+
+**B-W2 (WARNING, confidence high): a sentence on pack-item cache misses contradicts what the code does.**
+- Location: `docs/system/indexes-and-context.md:285`. Quote: "Everything in the earlier pack that is not reused is read again. A retry's report says how many items were reused, and lists each item of the earlier pack that it read again with its source, its ID and the reason from the list above."
+- Problem 1: the first sentence is false. The code lists only an earlier-pack item that the new pack picks again and that misses (`src/app/context.ts:461-470`), or one whose handle is revoked (`src/app/context.ts:431`). An earlier-pack item that the retry does not pick again, because of ranking, the snippet cap or a share limit, is neither read again nor listed.
+- Problem 2: a revoked item (`access_revoked`) is dropped before any read (`src/app/context.ts:427-433`). The report lists it, but it is not "read again". This conflicts with "lists each item ... that it read again", which also contradicts list item 1 of the same section.
+- What matches the code: the order of the five misses and "first that applies is the reason" match `cacheMiss` (`src/domain/cache-scope.ts:51-58`); item format 1 matches `PACK_ITEM_FORMAT`; the stamping order (profile, accessScope, format) matches `packItem` (`src/app/context.ts:229-246`).
+- Suggested fix, verbatim: "replace the two sentences with "An item of the earlier pack that the retry picks again and cannot reuse is read again, and the report lists it with its source, its ID and the reason from the list above. An item whose access was revoked is not read, and the report lists it with the reason `access_revoked`. An earlier item that the retry does not pick is not listed.""
+
+### Group B, NITs
+
+The reviewer numbered these 3 to 5 in `round-3-B.md`.
+
+**B-N3 (NIT, confidence medium): knowledge-pass success lead is stated without its one-run basis.**
+- Location: `docs/system/indexes-and-context.md:140`. Quote: "found it ahead of the code-only arm on successes, 3 of 6 against 2 of 6."
+- The figures are correct against ADR-017 (arm B 2 successes, arm C 3). The adjoining clause says ADR-015 calls "the sample small and the token edge thin", but the success lead is one run. ADR-017 says "the ranking of B and C is one run. The knowledge-pass outcome now depends on that one run."
+- Suggested fix, verbatim: "add "a lead of one run" after "2 of 6", or route the reader to ADR-017 for that caveat."
+
+**B-N4 (NIT, confidence medium): the 60-second figure has two homes.**
+- Location: `docs/system/integrations.md:387`, a failure-table row stating "counts as stale only when its file is older than 60 seconds".
+- The rule lives in `profiles-and-credentials.md:26`. The `ps` row at `integrations.md:23` already routes there by link.
+- Suggested fix, verbatim: "shorten the row to "the bindings lock falls back to the age of its file (see ...#selecting-a-profile)" and drop the number. This is optional, because failure rows are a legitimate place to route."
+
+**B-N5 (NIT, confidence low): "writes nothing to the clone".**
+- Location: `docs/system/integrations.md:271` (Patch). Quote: "It writes nothing to the clone and leaves the clone's index alone."
+- Evidence: `treeOfWorkingContent` (`src/adapters/git/run-workspace.ts:735-757`) uses a temporary index outside the clone's own index. `git add -A` and `write-tree` still add objects to the clone's object store. The port comment says the same (`src/ports/run-workspace.ts:167`). The user-visible claim (working tree and index untouched) is true.
+- Suggested fix, verbatim: "say "changes no file of the working tree and leaves the clone's index alone"."
+
+### Open item outside the review groups
+
+- `docs/decisions/ADR-017-ac8-brief-coverage.md` says "Date 2026-11-23" and, in decision 2, approval on 2026-11-25. An accepted ADR is never rewritten, so the plan did not edit it. The owner decides whether a superseding ADR or an accepted exception is wanted.
+
+### Dispositions of round 3
+
+Each fix was checked against the code at HEAD, not against a proposal. Commit `fdde37f` holds the four fixes.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| A-W1: the gate's step list omits the unshowable-values denial | WARNING | Fixed. Step 6 now says that with no source, parameters that cannot be shown whole are denied with `privileged:unapprovable` and no request is written; step 7 starts "Otherwise" and keeps the `approval-required:` denial. Checked against `src/app/authorize.ts:154-164` (a contract or a recorded approval allows first; `UNAPPROVABLE_RULE`, `privileged:unapprovable` at `src/domain/privileged-commands.ts:42`, is returned at `:161`, before the pending-request lookup at `:164`). Adjustment to the reviewer's text: the inserted step keeps the "With no source" condition of the old step 6, because `authorize.ts:154-157` lets a contract or a recorded approval allow these parameters before `:159-162` refuses them. |
+| A-W2: the "cannot be checked" reason texts are stated for both modes | WARNING | Fixed. The git alias and brace-glob bullets each begin "In an attended session the reason says" and end with "A run denies the line as `shell-syntax` with that rule's own reason." Checked against `src/domain/hook-decision.ts:820-821`, `src/domain/run-shell-rules.ts:35-36` and `src/hook/pre-tool-use.ts:659`. Adjustment: the reviewer's semicolon is two sentences here so the alias sentence stays within the 35-word cap. No other bullet of the list states a reason text, so these two are the only sentences scoped. |
+| B-W1: dangling reference "What the record states" | WARNING | Fixed with the reviewer's link to `#knowledge-record-fields`. The heading "Knowledge record fields" exists in `indexes-and-context.md` and describes `corpusCap`; no document of `docs/system` names the old heading. |
+| B-W2: the reuse sentences contradict the code | WARNING | Fixed. Checked against `src/app/context.ts:427-433` (revoked handles are dropped before any read and listed in `refetch` only when the earlier pack held them, `:431`), `:461-472` (a picked earlier item that misses is listed with its miss reason and read; `reused` is counted), `:537` (the report's `reuse: { reused, refetch }`) and `src/domain/cache-scope.ts:51-58` (miss order). Three adjustments to the reviewer's text: the first sentence keeps the reused count that the old text stated (`reuse.reused`, `context.ts:472`, `:537`) and gives "the report" its antecedent; "of the earlier pack" is added to the revoked sentence, because a revoked handle reaches the report only when the earlier pack held it (`context.ts:431`); "Any other" starts the last sentence, because a revoked earlier item is never picked (it is removed before picking, `:433`) and yet is listed. |
+| A-N1 to A-N6, B-N3 to B-N5 | NIT | Not fixed: owner decision of 2026-11-25; open. |
+
+## Round 4 (scoped by the owner)
+
+Scope, per group, against the round-3 version (`08db6a5`, the HEAD both round-3 reports name):
+
+- Group A: `git diff 08db6a5 HEAD -- docs/system/policy-and-approvals.md docs/system/containment.md docs/system/diagrams/approve-privileged-action.puml docs/system/processes.md docs/system/cli-reference.md docs/system/data-model.md`
+- Group B: `git diff 08db6a5 HEAD -- docs/system/runs.md docs/system/profiles-and-credentials.md docs/system/integrations.md docs/system/indexes-and-context.md docs/system/README.md`
+
+Only `policy-and-approvals.md` (group A) and `indexes-and-context.md` (group B) changed since round 3. The other nine documents are unchanged by digest. The digests below were printed by a command over the files, not typed.
+
+Dispatch rule: one fresh reviewer per group with no earlier round in its prompt. Each report is stored verbatim as `round-4-A.md` and `round-4-B.md`. A group passes only with no BLOCKER and no WARNING within the scope.
+
+| Group | Document | sha256 to review in round 4 |
+|---|---|---|
+| A | `policy-and-approvals.md` | `b6f371ec9b122a4dd193277bb17f2f056dc9f23c6e0e77f1298f4185e0c66962` (changed since round 3) |
+| A | `containment.md` | `0bdf47a8b35b064e614ad8fe2bc90d336c260a591e83d0a4a069c0e2234b6d16` (unchanged since round 3) |
+| A | `diagrams/approve-privileged-action.puml` | `0f5cfa1268c1d34cce59eaef66dec72e6d3b93deab3aa00ddb29a46a61e4524e` (unchanged since round 3) |
+| A | `processes.md` | `d329315f11e8e047e666d34fcf2952382b2be0371be46d99ed474e0c6890ac51` (unchanged since round 3) |
+| A | `cli-reference.md` | `30cd0bba18f5b7f305739bfa1f0378e813e1011679de2096e58a68a7902d66fc` (unchanged since round 3) |
+| A | `data-model.md` | `f1badee031dc5cf7bee8d7db7468c53d5da798fd835df7996d775b686b663cbc` (unchanged since round 3) |
+| B | `runs.md` | `3fe2166132fab036a22a554a139386d2ea9b864186ff1b32c767f06ef32af879` (unchanged since round 3) |
+| B | `profiles-and-credentials.md` | `d1dfa303f68a07902d39545da1ec178a23db6bf710ff09670db6743b1165f368` (unchanged since round 3) |
+| B | `integrations.md` | `eaf1bdfc43485735699ca07f7ca0d27a4ff4779cfb22a288b01232c681192858` (unchanged since round 3) |
+| B | `indexes-and-context.md` | `21f6c1dd1783b19018eb498a258217db571bb0793c88b04453324c613d4ec4bc` (changed since round 3) |
+| B | `README.md` | `e76c486216137e1e30694b9d03b7a14e3ce652c320060633a4b250e16dd66f53` (unchanged since round 3) |
+
+Each document's current sha256 was compared with the digest its round-4 report records: `hashlib` over the file at HEAD, then a search for the hex string in the report. All eleven were found, so none differed, and each equals the digest in the table above. No group document changed after the round-4 dispatch (`git diff --quiet e5b33ba` over the eleven documents exits 0). Group A passed in `round-4-A.md` and group B in `round-4-B.md`. Both reports were committed once, unchanged, in `8064176`.
+
+The reports record two observations outside the scope. Neither is counted, and neither changed a document. Group A: the full attended-session hook message wraps the alias and brace reasons with advice to split the command, which fits neither cause; the document speaks only of "the reason", which is accurate. Group B: when a source refuses a read as denied or unauthenticated, the handles are omitted with `access_revoked` but are not added to the retry report's refetch list; the sentence on revoked items holds for revoked references, and the edge is narrow.

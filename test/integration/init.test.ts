@@ -64,7 +64,7 @@ describe('avarice init', () => {
     assert.ok(r.stdout.includes(configPath), r.stdout);
     assert.ok(r.stdout.includes(roots.AVARICE_DATA_ROOT), r.stdout);
     assert.ok(r.stdout.includes(roots.AVARICE_WORK_ROOT), r.stdout);
-    assert.match(r.stdout, /schema version:\s+3/);
+    assert.match(r.stdout, /schema version:\s+4/);
     assert.match(r.stdout, /node:sqlite/);
     assert.match(r.stdout, /experimental/i);
     assert.deepEqual(JSON.parse(readFileSync(configPath, 'utf8')), {
@@ -73,7 +73,7 @@ describe('avarice init', () => {
       dataRoot: roots.AVARICE_DATA_ROOT,
       workRoot: roots.AVARICE_WORK_ROOT,
     });
-    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '3');
+    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '4');
   });
 
   it('uses mode 0700 for every directory and 0600 for the config file and the store files', () => {
@@ -98,10 +98,10 @@ describe('avarice init', () => {
     const second = runCli(['init'], { roots });
     assert.equal(second.code, 0, second.stderr);
     assert.equal(readFileSync(configPath, 'utf8'), before);
-    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '3');
+    assert.equal(schemaVersion(roots.AVARICE_DATA_ROOT), '4');
     const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'), { readOnly: true });
     try {
-      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 3);
+      assert.equal((db.prepare('SELECT count(*) AS n FROM schema_migrations').get() as { n: number }).n, 4);
     } finally {
       db.close();
     }
@@ -118,12 +118,12 @@ describe('avarice init', () => {
     assert.ok(second.stdout.includes(roots.AVARICE_WORK_ROOT), 'the roots follow the result line');
   });
 
-  it('accepts --profile personal-local and refuses any other profile name', () => {
+  it('accepts --profile personal-local and refuses a name that is not a profile name', () => {
     const roots = freshRoots();
     assert.equal(runCli(['init', '--profile', 'personal-local'], { roots }).code, 0);
     const other = runCli(['init', '--profile', 'team'], { roots: freshRoots() });
     assert.equal(other.code, 64);
-    assert.match(other.stderr, /only personal-local in Phase 1/);
+    assert.match(other.stderr, /not a profile name/);
   });
 
   it('refuses another profile name before anything is created', () => {

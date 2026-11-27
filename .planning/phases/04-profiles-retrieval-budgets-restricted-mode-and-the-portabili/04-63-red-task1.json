@@ -1,0 +1,5 @@
+{
+  "command": "node --test test/unit/privileged-commands.test.ts",
+  "exitCode": 1,
+  "output": "  ✖ under bash\n  ✖ under zsh\n✖ the differential oracle: every privileged command a shell runs on the corpus is one classifyLine returns (T-04-106)\n  ✖ \"find . -maxdepth 0 -exec git push \\\\;\" is git.push\n  ✖ \"find . -maxdepth 0 -exec git push ';'\" is git.push\n  ✖ \"find . -maxdepth 0 -execdir git push {} +\" is git.push\n  ✖ \"find . -maxdepth 0 -ok git push {} \\\\;\" is git.push\n  ✖ \"find . -maxdepth 0 -okdir git push \\\\;\" is git.push\n  ✖ \"find . -name x -exec echo {} \\\\; -exec git push \\\\;\" is git.push\n  ✖ \"find . -exec sh -c 'git push' _ {} \\\\;\" is git.push\n  ✖ \"sudo find . -exec git push \\\\;\" is git.push\n  ✖ \"parallel git push ::: a\" is git.push\nAssertionError [ERR_ASSERTION]: bash ran git.push but classifyLine did not return it for \"find . -maxdepth 0 -exec git push \\\\;\" (none)\nAssertionError [ERR_ASSERTION]: zsh ran git.push but classifyLine did not return it for \"find . -maxdepth 0 -exec git push \\\\;\" (none)"
+}

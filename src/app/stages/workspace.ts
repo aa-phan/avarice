@@ -7,12 +7,21 @@
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
 import { chooseMappingMode } from '../../domain/mapping.ts';
+import { requireCapabilities } from '../capabilities.ts';
 import { GSD_ADMITTED_PACKAGE, GSD_ADMITTED_RANGE } from '../../ports/gsd-onboarding.ts';
 import type { GsdSetting } from '../../ports/gsd-onboarding.ts';
 import type { OnboardingRow } from '../../ports/ledger.ts';
-import type { ExistingMapClass } from '../../domain/preflight.ts';
+import { existingMapOutcome } from '../../domain/preflight.ts';
+import type { ExistingMapClass, ExistingMapOutcome } from '../../domain/preflight.ts';
+import { FULL_REMAP_DRIFT_THRESHOLD, planRefresh } from '../../domain/refresh-plan.ts';
+import type { RefreshPlan } from '../../domain/refresh-plan.ts';
+import { driftOf, refreshFacts, refreshOfPreflight } from '../refresh.ts';
+import type { DriftFinding, RefreshOf } from '../refresh.ts';
 import type { Stage, StageContext } from './stage.ts';
 import { loadContract, stopIncompatible } from './shared.ts';
+import { restrictedOfPreflight } from './register.ts';
+
+const MAX_REASON = 200;
 
 // ONB-5: commits stay off (GSD's own `query commit` then skips), and the settings the mapping workflows read.
 export const STAGING_GSD_SETTINGS: readonly GsdSetting[] = [
@@ -28,6 +37,58 @@ function existingMapOf(preflight: unknown): ExistingMapClass {
   const state = typeof preflight === 'object' && preflight !== null ? (preflight as Record<string, unknown>)['existingState'] : undefined;
   const value = typeof state === 'object' && state !== null ? (state as Record<string, unknown>)['codebaseMap'] : undefined;
   return typeof value === 'string' && EXISTING_MAP_CLASSES.includes(value) ? (value as ExistingMapClass) : 'none';
+}
+
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const MAX_RECORDED_CHANGED = 200;
+
+// The refresh plan of a map the repository already has (ONB-11) and the facts it rests on, as `mapping:plan` records them. The planner is
+// `planRefresh`; a git read that fails (a revision git cannot resolve, a diff past the bound) plans a full map and says why.
+interface RefreshDecision {
+  plan: RefreshPlan;
+  record: Record<string, unknown>;
+}
+
+function decideRefresh(ctx: StageContext, stagingPath: string, toRevision: string, refreshOf: RefreshOf | null, drift: DriftFinding | null): RefreshDecision | null {
+  // A first onboarding of a repository whose map has no drift question (not a complete stamped map) has nothing to refresh.
+  if (refreshOf === null && drift === null) return null;
+  // The active record's revision, else the stamp of the map the repository already has.
+  const fromRevision = refreshOf?.onboardedRevision ?? drift?.lastMappedCommit ?? null;
+  const basis = {
+    ...(refreshOf !== null ? { fromRecordVersion: refreshOf.recordVersion } : {}),
+    fromRevision,
+    toRevision,
+    threshold: FULL_REMAP_DRIFT_THRESHOLD,
+    drift: drift?.verdict ?? null,
+  };
+  const full = (reason: string): RefreshDecision => ({ plan: { mode: 'full', reason }, record: { ...basis, mode: 'full', reason } });
+  if (fromRevision === null || !COMMIT_SHA.test(fromRevision)) return full('no-stamp: no revision to measure the changes from');
+  const facts = refreshFacts(ctx.deps, stagingPath, { fromRevision, toRevision, drift });
+  if (!facts.ok) return full(`changed-paths-unavailable: ${facts.error.kind}`);
+  const plan = planRefresh(facts.value, { threshold: FULL_REMAP_DRIFT_THRESHOLD });
+  return {
+    plan,
+    record: {
+      ...basis,
+      mode: plan.mode,
+      ...(plan.scope !== undefined ? { scope: plan.scope } : {}),
+      reason: plan.reason,
+      newTopLevelDirs: [...facts.value.newTopLevelDirs],
+      changedPathCount: facts.value.changedPaths.length,
+      changedPaths: facts.value.changedPaths.slice(0, MAX_RECORDED_CHANGED),
+      manifestChanged: facts.value.manifestChanged,
+    },
+  };
+}
+
+// What the workspace stage records as the outcome for the map the repository has. The class and GSD's drift verdict give it (`existingMapOutcome`);
+// the refresh plan overrides it for a complete stamped map, whose drift verdict alone cannot say that a manifest change or new directories make a
+// `pass` or a `block` a full remap: incremental is `adopt`, an unreadable drift stays `full-in-staging`, and every other plan is `refresh`.
+function outcomeOf(existingMap: ExistingMapClass, drift: DriftFinding | null, refresh: RefreshDecision | null): ExistingMapOutcome {
+  const byClass = existingMapOutcome(existingMap, drift?.verdict ?? null);
+  if (refresh === null || existingMap !== 'stamped-complete') return byClass;
+  if (refresh.plan.mode === 'incremental') return 'adopt';
+  return drift?.verdict === 'unreadable' || drift === null ? byClass : 'refresh';
 }
 
 export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRow): Promise<Result<void>> => {
@@ -72,14 +133,43 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
   });
   if (!probed.ok) return probed;
 
+  // A complete stamped map is adopted only when GSD's drift check, run here in staging (never in the user's checkout), passes. No other class
+  // has a drift question: the others are regenerated in staging whatever the drift is (docs "Repositories already using GSD").
   const existingMap = existingMapOf(row.preflight);
-  const decision = chooseMappingMode({ isBrownfield: probe.value.isBrownfield, requested: contract.value.body.mapping.mode, existingMap });
+  const drift = existingMap === 'stamped-complete' ? await driftOf(gsd, stagingPath) : null;
+  // ONB-11: a map with a drift question, or any map of an active project (the onboarding is then a refresh of its record), is planned by how much
+  // changed since the revision it describes: incremental, path-scoped or full.
+  const refresh = decideRefresh(ctx, stagingPath, contract.value.body.workspace.baseRevision, refreshOfPreflight(row.preflight), drift);
+  const outcome = outcomeOf(existingMap, drift, refresh);
+  // `onboard --restricted` (plan 04-24; CON-4, D-12) is one fast map under the restricted launch: the request is read from the stored preflight, so a resume under another
+  // process maps the same way. The mode is fast whatever the refresh plan or an existing map would choose; a restricted map never claims more than four files (ONB-7).
+  const restricted = restrictedOfPreflight(row.preflight);
+  const decision = chooseMappingMode({
+    isBrownfield: probe.value.isBrownfield,
+    requested: restricted ? 'fast' : contract.value.body.mapping.mode,
+    existingMap,
+    outcome,
+    readScope: contract.value.body.files.read,
+    ...(refresh !== null ? { refresh: refresh.plan } : {}),
+  });
   if (!decision.ok) {
     if (decision.error.kind !== 'unsupported') return decision;
     ctx.note(`mapping mode ${contract.value.body.mapping.mode} is not available: ${decision.error.detail ?? decision.error.capability}`);
     const blocked = ctx.transition(row, 'blocked', 'none', {
       reason: 'scope_unavailable',
       data: { capability: decision.error.capability, ...(decision.error.reducedMode !== undefined ? { reducedMode: decision.error.reducedMode } : {}) },
+    });
+    return blocked.ok ? ok(undefined) : blocked;
+  }
+  // FR-16: the mapping the decision chose needs what the admitted GSD declares; a step whose capability is missing stops here, before staging
+  // is configured or any host starts, naming the capability and the reduced mode. Nothing is simulated.
+  const capable = requireCapabilities(deps, `onboarding.map.${decision.value.mode}`);
+  if (!capable.ok) {
+    if (capable.error.kind !== 'unsupported') return capable;
+    ctx.note(`mapping mode ${decision.value.mode} is not available: ${capable.error.capability}${capable.error.reducedMode !== undefined ? `; reduced mode: ${capable.error.reducedMode}` : ''}`);
+    const blocked = ctx.transition(row, 'blocked', 'none', {
+      reason: 'scope_unavailable',
+      data: { capability: capable.error.capability, ...(capable.error.reducedMode !== undefined ? { reducedMode: capable.error.reducedMode } : {}) },
     });
     return blocked.ok ? ok(undefined) : blocked;
   }
@@ -92,9 +182,14 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
     mode: decision.value.mode,
     completeness: decision.value.completeness,
     existingMap,
+    outcome: decision.value.outcome,
     reason: decision.value.reason,
     requested: contract.value.body.mapping.mode,
+    ...(decision.value.paths !== undefined ? { paths: decision.value.paths } : {}),
+    drift: drift === null ? null : { verdict: drift.verdict, affectedPaths: drift.affectedPaths, threshold: drift.threshold, reason: drift.reason },
+    ...(refresh !== null ? { refresh: refresh.record } : {}),
     ...(answer === 'refresh' || answer === 'update' || answer === 'skip' ? { existingMapAnswer: answer } : {}),
+    ...(restricted ? { restricted: true } : {}),
   };
   const planned = deps.ledger.recordStepResult(row.onboardingId, {
     step: 'mapping:plan',
@@ -119,14 +214,26 @@ export const workspaceStage: Stage = async (ctx: StageContext, row: OnboardingRo
 
   const verify = ctx.checkpoint('verify-enforcement');
   if (!verify.ok) return verify;
-  const enforcement = deps.host.descriptor.attributes?.['enforcement'];
-  if (enforcement !== 'enforced') {
-    ctx.note(`host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed`);
-    const blocked = ctx.transition(row, 'blocked', 'none', {
-      reason: 'enforcement_failure',
-      data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown' },
-    });
-    return blocked.ok ? ok(undefined) : blocked;
+  if (restricted) {
+    // The restricted host is its own dependency and is judged on its own descriptor: it needs a `claude` that lists `--restricted`, and no admitted version, sandbox or hook.
+    // Without it nothing falls back to the contained host (T-04-66).
+    const attributes = deps.restrictedHost?.descriptor.attributes ?? {};
+    if (attributes['enforcement'] !== 'restricted') {
+      const cause = deps.restrictedHost === undefined ? 'no restricted host is composed' : String(attributes['reason'] ?? 'the restricted host is not ready').slice(0, MAX_REASON);
+      ctx.note(`restricted mode is not available: ${cause}; no map was started`);
+      const blocked = ctx.transition(row, 'blocked', 'none', { reason: 'enforcement_failure', data: { host: 'restricted', enforcement: 'none', reason: cause } });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
+  } else {
+    const enforcement = deps.host.descriptor.attributes?.['enforcement'];
+    if (enforcement !== 'enforced') {
+      ctx.note(`host ${deps.host.descriptor.adapter} reports enforcement ${enforcement ?? 'unknown'}; containment cannot be guaranteed. Rerun with --restricted to map in restricted mode (a fast map the record labels partial (restricted))`);
+      const blocked = ctx.transition(row, 'blocked', 'none', {
+        reason: 'enforcement_failure',
+        data: { host: deps.host.descriptor.adapter, enforcement: enforcement ?? 'unknown' },
+      });
+      return blocked.ok ? ok(undefined) : blocked;
+    }
   }
 
   const moved = ctx.transition(row, 'mapping', 'launch:map');

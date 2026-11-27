@@ -1,0 +1,219 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-rejudgement",
+  "decision": "ADR-017",
+  "boundPercent": 95,
+  "resultsSha256": "3b40148356b2f2dd7420d18ed6e6d36b7e6d73378fe8f4d52deeba5fa9e5b5e8",
+  "tasksSha256": "3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92",
+  "coverageSha256": "f704343603878a975d3b2acff939d04502dff34c02f844008b8fa8f31414861b",
+  "amendmentSha256": "ecc3ada17f471cddfa7d4b0f59be08bcb52cf30f22fe1299a038922ac4b3e669",
+  "successRule": "A task succeeds when every required check passes at the end of the run, the held-out test copied from the target commit after the agent finishes passes, and the run delivered every bullet of its brief, as the brief-coverage record of the run states. Reviewer judgment beyond the brief's bullets is a sampled owner spot-check, not a gate.",
+  "arms": {
+    "A": {
+      "runs": 6,
+      "success": 0,
+      "partial": 2,
+      "tokens": 19833920,
+      "shareOfA": 1
+    },
+    "B": {
+      "runs": 6,
+      "success": 2,
+      "partial": 2,
+      "tokens": 18715894,
+      "shareOfA": 0.9436
+    },
+    "C": {
+      "runs": 6,
+      "success": 3,
+      "partial": 1,
+      "tokens": 17557851,
+      "shareOfA": 0.8852
+    }
+  },
+  "runs": [
+    {
+      "task": "T01",
+      "arm": "A",
+      "recordedSuccess": true,
+      "outcome": "partial",
+      "skipped": [],
+      "partly": [
+        "Add unit and e2e coverage for the reduced-then-off case"
+      ]
+    },
+    {
+      "task": "T01",
+      "arm": "B",
+      "recordedSuccess": true,
+      "outcome": "partial",
+      "skipped": [],
+      "partly": [
+        "Add unit and e2e coverage for the reduced-then-off case"
+      ]
+    },
+    {
+      "task": "T01",
+      "arm": "C",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": [
+        "Add unit and e2e coverage for the reduced-then-off case"
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "A",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": [
+        "e2e drag, modifier and repeat cases plus unit coverage"
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "B",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": [
+        "e2e drag, modifier and repeat cases plus unit coverage"
+      ]
+    },
+    {
+      "task": "T02",
+      "arm": "C",
+      "recordedSuccess": true,
+      "outcome": "partial",
+      "skipped": [],
+      "partly": [
+        "e2e drag, modifier and repeat cases plus unit coverage"
+      ]
+    },
+    {
+      "task": "T03",
+      "arm": "A",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T03",
+      "arm": "B",
+      "recordedSuccess": true,
+      "outcome": "success",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T03",
+      "arm": "C",
+      "recordedSuccess": true,
+      "outcome": "success",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T04",
+      "arm": "A",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T04",
+      "arm": "B",
+      "recordedSuccess": true,
+      "outcome": "success",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T04",
+      "arm": "C",
+      "recordedSuccess": true,
+      "outcome": "success",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T05",
+      "arm": "A",
+      "recordedSuccess": true,
+      "outcome": "partial",
+      "skipped": [],
+      "partly": [
+        "unit check on every picture source; e2e density cases at pixel ratio 1 and 3"
+      ]
+    },
+    {
+      "task": "T05",
+      "arm": "B",
+      "recordedSuccess": true,
+      "outcome": "partial",
+      "skipped": [],
+      "partly": [
+        "unit check on every picture source; e2e density cases at pixel ratio 1 and 3"
+      ]
+    },
+    {
+      "task": "T05",
+      "arm": "C",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": [
+        "unit check on every picture source; e2e density cases at pixel ratio 1 and 3"
+      ]
+    },
+    {
+      "task": "T06",
+      "arm": "A",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T06",
+      "arm": "B",
+      "recordedSuccess": false,
+      "outcome": "failure",
+      "skipped": [],
+      "partly": []
+    },
+    {
+      "task": "T06",
+      "arm": "C",
+      "recordedSuccess": true,
+      "outcome": "success",
+      "skipped": [],
+      "partly": []
+    }
+  ],
+  "verdict": {
+    "pass": true,
+    "via": "B",
+    "reason": "arm B succeeds at least as often as A at 94.4% of A's tokens",
+    "arms": {
+      "B": {
+        "successOk": true,
+        "tokensOk": true,
+        "tokenShare": 0.9436306085735952
+      },
+      "C": {
+        "successOk": true,
+        "tokensOk": true,
+        "tokenShare": 0.8852436129620368
+      }
+    }
+  },
+  "knowledge": {
+    "outcome": "on",
+    "reason": "arm C succeeds more often than B"
+  }
+}

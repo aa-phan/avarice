@@ -3,18 +3,21 @@
 // its file; this file does not change.
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './args.ts';
-import type { CommandExtras, CommandModule, Io } from './args.ts';
+import type { CommandExtras, CommandModule, Io, ParsedArgs } from './args.ts';
 import type { SchedulerSeam } from '../adapters/schedule/launchd.ts';
 import { createDeps, EXIT_INTERNAL } from './composition.ts';
 import type { DepsOverrides } from './composition.ts';
 import type { AppDeps } from '../app/deps.ts';
+import { describeError } from '../adapters/sqlite/db.ts';
 import { errorLine } from './render/style.ts';
 import { processAncestry } from '../adapters/proc/ancestry.ts';
 import type { ProcessEntry } from '../adapters/proc/ancestry.ts';
 import type { Result } from '../domain/result.ts';
 import type { IdentityContext } from './identity.ts';
+import { parseProfileName, profileClass, selectProfile } from '../domain/profile.ts';
+import { EXIT_PROFILE_REFUSED, readRepositoryContext } from './profile-gate.ts';
 
-export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel'] as const;
+export const COMMANDS = ['init', 'repo', 'onboard', 'start', 'supervise', 'status', 'inbox', 'resume', 'context', 'install-host', 'contract', 'decide', 'digest', 'schedule', 'cancel', 'approve', 'doctor', 'evidence', 'pr', 'comment'] as const;
 export const EXIT_USAGE = 64;
 
 // The terminal the interactive shell (FR-27, ADR-013) reads keys from and draws on. `isTTY` is how a stream says it is a terminal;
@@ -46,6 +49,11 @@ commands:
 
 function isCommand(name: string): name is (typeof COMMANDS)[number] {
   return (COMMANDS as readonly string[]).includes(name);
+}
+
+// A composition flag a module gives as a boolean, or as a function of the arguments when one command has a reading form and a writing one.
+function flagOf(flag: boolean | ((args: ParsedArgs) => boolean) | undefined, args: ParsedArgs): boolean {
+  return typeof flag === 'function' ? flag(args) : flag === true;
 }
 
 function defaultIo(): Io {
@@ -110,7 +118,52 @@ export async function main(argv: readonly string[], overrides: MainOverrides = {
     return EXIT_USAGE;
   }
 
-  const composed = createDeps(env, overrides, { readOnly: mod.readOnly === true, gsd: mod.needsGsd === true });
+  // D-16, D-17: which profile this command runs under is decided here, before any directory or store exists. A name that does not
+  // follow the grammar ends the command with the usage exit and creates nothing.
+  const flag = args.flags['profile'];
+  const envProfile = env['AVARICE_PROFILE'];
+  if (flag === true) {
+    io.err(`${errorLine(name, '--profile needs a profile name')}\n`);
+    return EXIT_USAGE;
+  }
+  if (flag !== undefined) {
+    const named = parseProfileName(flag);
+    if (!named.ok) {
+      io.err(`${errorLine(name, describeError(named.error))}\n`);
+      return EXIT_USAGE;
+    }
+  }
+  const envDefault = envProfile !== undefined && envProfile !== '' ? envProfile : undefined;
+  // S-9: the repository the command works on may be bound to a profile, and may belong to an enterprise one. Both are read from files in
+  // the config home and from git, never from a store, so a refusal below has opened nothing.
+  const repository = readRepositoryContext(env, mod.repository?.(args), process.cwd());
+  if (!repository.ok) {
+    io.err(`${errorLine(name, repository.message)}\n`);
+    return repository.code;
+  }
+  const { bound, enterprise } = repository.value;
+  const selected = selectProfile({ ...(flag !== undefined ? { flag } : {}), ...(bound !== undefined ? { bound } : {}), ...(envDefault !== undefined ? { envDefault } : {}) });
+  if (!selected.ok) {
+    if (selected.error.kind === 'denied') {
+      io.err(`${errorLine(name, `refused: repository bound to ${bound ?? ''}; run it under that profile (--profile ${bound ?? ''}) or leave --profile out`)}\n`);
+      return EXIT_PROFILE_REFUSED;
+    }
+    io.err(`${errorLine(name, `AVARICE_PROFILE: ${describeError(selected.error)}`)}\n`);
+    return EXIT_USAGE;
+  }
+  // D-16: a repository that an enterprise profile claims by its remote is never run under a personal profile and never re-bound to one.
+  if (enterprise !== undefined && profileClass(selected.value) === 'personal') {
+    io.err(`${errorLine(name, `refused: the repository's remote belongs to ${enterprise}, not to ${selected.value}; run it under ${enterprise} (--profile ${enterprise})`)}\n`);
+    return EXIT_PROFILE_REFUSED;
+  }
+
+  // `doctor` (plan 04-25) diagnoses what the normal composition refuses to start on, so its module composes its own read-only dependency set: no migration, no lease, no
+  // GSD or host requirement. A module that exports `composeDoctor` is composed by it instead of createDeps; only that module does.
+  const own = (mod as unknown as { composeDoctor?: (env: NodeJS.ProcessEnv, profile: string) => { ok: true; value: { deps: unknown; close(): void } } }).composeDoctor;
+  const composed =
+    typeof own === 'function'
+      ? (own(env, selected.value) as { ok: true; value: { deps: AppDeps; close(): void } })
+      : createDeps(env, overrides, { readOnly: flagOf(mod.readOnly, args), gsd: flagOf(mod.needsGsd, args), profile: selected.value });
   if (!composed.ok) {
     io.err(`${errorLine(name, composed.message)}\n`);
     return composed.code;

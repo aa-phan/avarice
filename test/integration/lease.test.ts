@@ -3,6 +3,7 @@
 // explicit clock values; process-level cases run the test CLI (production main() with the fake host).
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -240,7 +241,7 @@ describe('avarice resume', () => {
     return written.then((outcome) => {
       assert.ok(outcome.ok);
       const db = new DatabaseSync(join(roots.AVARICE_DATA_ROOT, 'state.db'));
-      db.prepare("INSERT INTO onboarding_steps (onboarding_id, step, attempt, status, result_json, started_at) VALUES (?, 'launch:map', 1, 'started', '{}', ?)").run(id, new Date().toISOString());
+      db.prepare("INSERT INTO onboarding_steps (onboarding_id, step, attempt, status, result_json, started_at) VALUES (?, 'launch:map', 1, 'started', ?, ?)").run(id, JSON.stringify({ sessionId: randomUUID() }), new Date().toISOString());
       db.close();
       sleepSync(EXPIRY_WAIT_MS);
 

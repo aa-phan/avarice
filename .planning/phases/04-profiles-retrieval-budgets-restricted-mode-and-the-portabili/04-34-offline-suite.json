@@ -1,0 +1,105 @@
+{
+  "plan": "04-34",
+  "gate": "offline suite before live spend (D-04)",
+  "recordedAt": "2026-11-17",
+  "commit": "4a8d9fd92e2afdcf2b554cb15974fd7b88df0c77",
+  "result": "pass",
+  "devNode": "v26.9.0 (/opt/homebrew/bin/node)",
+  "node22": {
+    "ran": false,
+    "reason": "AVARICE_NODE22 is unset and no Node 22 binary is installed on this machine (only /opt/homebrew/bin/node v26.9.0), so scripts/test-matrix.sh exits 2 and the Node 22.22.3 leg was not run. The gate records the dev-Node leg only; the owner is asked about the missing leg at the checkpoint (plan flagged assumption 3)."
+  },
+  "installedHost": {
+    "claudeVersion": "2.1.326 (Claude Code)",
+    "lastSpikedVersion": "2.1.325 (plan 04-02, spike S4-C)",
+    "lastVerifiedVersion": "2.1.319 (VERIFIED_HOST_VERSIONS: 2.1.312, 2.1.316, 2.1.317, 2.1.318, 2.1.319)"
+  },
+  "commands": [
+    {
+      "command": "npm test",
+      "ranBy": "orchestrator (caffeinate -i, dev Node v26.9.0), at HEAD 4a8d9fd92e2afdcf2b554cb15974fd7b88df0c77, the same HEAD this record was made at",
+      "log": "/Users/aphan/.claude-edu/jobs/5be29488/tmp/wave12-test.log",
+      "exitCode": 0,
+      "tests": 5113,
+      "suites": 1083,
+      "pass": 5042,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 71,
+      "durationSeconds": 1158,
+      "flakeReruns": [],
+      "note": "the whole suite on the development Node; the 71 skipped tests are the live and attended cases that need AVARICE_LIVE and spend nothing offline. No test failed, so the two known flakes (run-start.test.ts and the run-baseline-workflow.test.ts README.md G2 case) did not need their one allowed re-run."
+    },
+    {
+      "command": "caffeinate -i node scripts/status-bench.ts --runs 1000 --samples 30",
+      "ac": "AC-2",
+      "exitCode": 0,
+      "runs": 1000,
+      "samples": 30,
+      "p50Ms": 180,
+      "p95Ms": 206,
+      "emptyP50Ms": 140,
+      "limitMs": 300,
+      "durationSeconds": 11,
+      "note": "printed {\"runs\":1000,\"samples\":30,\"p50Ms\":180,\"p95Ms\":206,\"emptyP50Ms\":140}; p95 206 ms is below the 300 ms limit"
+    },
+    {
+      "command": "caffeinate -i node --test test/integration/profile-isolation.test.ts test/integration/run-sandbox-other-profiles.test.ts",
+      "ac": "AC-6",
+      "exitCode": 0,
+      "tests": 40,
+      "suites": 6,
+      "pass": 40,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationSeconds": 20,
+      "flakeReruns": [],
+      "printedCounts": [
+        "cross-profile reads: 0 (enterprise-acme commands that failed on, or named, a denied personal-local path; 12 commands ran)",
+        "cross-profile reads: 0 (personal-local canaries in what enterprise-acme wrote; 5 canaries, 297 files and the store scanned)",
+        "cross-profile reads: 0 (default parents: commands that failed on, or named, a denied personal-local path; 5 commands ran)",
+        "cross-profile reads: 0 (default parents: personal-local canaries in what enterprise-acme wrote)"
+      ],
+      "note": "the isolation suite (profile-isolation) plus the sandbox other-profiles suite; 0 cross-profile reads"
+    },
+    {
+      "command": "caffeinate -i node --test test/integration/redaction-suite.test.ts",
+      "ac": "AC-5",
+      "exitCode": 0,
+      "tests": 5,
+      "suites": 1,
+      "pass": 5,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationSeconds": 9,
+      "flakeReruns": [],
+      "printedCounts": [
+        "secret patterns found: 0 (58 stores scanned: the SQLite dump, the artifact files, the history file and the rest of the data root)"
+      ],
+      "note": "the redaction suite; 0 secret patterns in the stores, artifacts and history"
+    },
+    {
+      "command": "caffeinate -i node --test test/integration/portability-proof.test.ts test/contract",
+      "ac": "AC-7",
+      "exitCode": 0,
+      "tests": 121,
+      "suites": 18,
+      "pass": 121,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "durationSeconds": 88,
+      "flakeReruns": [],
+      "printedCounts": [
+        "the commits of this plan change 0 lines under src/ (the AC-7 case in portability-proof.test.ts, plan 04-33's commits)",
+        "only the test entry reads AVARICE_TEST_REMOTE: no file under src, bin or scripts names it"
+      ],
+      "note": "the portability proof (workflow suite twice over local and fake-remote adapters, 0 lines of src) and the shared contract suite for CommandExecutor and ArtifactStore against both adapters"
+    }
+  ],
+  "loadSensitiveReruns": [],
+  "unexplainedFailures": [],
+  "unrunLegs": ["bash scripts/test-matrix.sh (Node 22.22.3): AVARICE_NODE22 unset, no Node 22 binary installed"]
+}

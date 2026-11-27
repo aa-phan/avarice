@@ -62,6 +62,9 @@ const isCompoundExtension = (token: string): boolean =>
 // all-capital names (`README.md`, `CLAUDE.md`, `LICENSE`) are not repeats of one letter.
 const isPlaceholderSegment = (segment: string): boolean => segment.split(/[-_.]/).some((part) => /^([A-Z])\1{2,}$/.test(part));
 
+// A host name (`api.example.com`): dotted labels ending in letters. The capture is the last label; one that is a file extension (`config.json`) is a file name.
+const HOST_NAME = /^(?:[A-Za-z0-9-]+\.)+([A-Za-z]{2,})$/;
+
 const MIME_TYPES: ReadonlySet<string> = new Set(['application', 'text', 'image', 'audio', 'video', 'multipart', 'font', 'message', 'model']);
 
 function stripFrontmatter(markdown: string): string {
@@ -89,7 +92,8 @@ function withoutFences(text: string): string[] {
   return kept;
 }
 
-function normalize(raw: string, backticked: boolean): string | null {
+// `explicit`: written as a directory (a trailing slash) or in the relative form (`./`), which says the author means a repository path.
+function normalize(raw: string, backticked: boolean): { path: string; explicit: boolean } | null {
   const token = raw
     .trim()
     .replace(/^[("'[<]+/, '')
@@ -106,6 +110,7 @@ function normalize(raw: string, backticked: boolean): string | null {
 
   if (isCompoundExtension(token)) return null;
   const trailingSlash = token.endsWith('/');
+  const explicit = trailingSlash || token.startsWith('./');
   let path = token.replace(/^(?:\.\/)+/, '').replace(/\/+$/, '');
   if (path.length === 0) return null;
   const segments = path.split('/');
@@ -124,7 +129,7 @@ function normalize(raw: string, backticked: boolean): string | null {
   const counts = backticked ? hasSlash || knownExtension : hasSlash && (trailingSlash || knownExtension);
   if (!counts) return null;
   path = segments.join('/');
-  return path;
+  return { path, explicit };
 }
 
 // The clauses of a line: split at `;`, at a table cell border and after a sentence end.
@@ -132,31 +137,39 @@ function clausesOf(line: string): string[] {
   return line.split(/[;|]|(?<=[.!?])\s+(?=[A-Z`(])/).filter((c) => c.trim() !== '');
 }
 
+// The unique references of several documents, in first-seen order, and the ones a document wrote in an explicit form (see `normalize`).
+function scanReferences(texts: Iterable<string>): Map<string, boolean> {
+  const seen = new Map<string, boolean>();
+  for (const text of texts) {
+    for (const line of withoutFences(stripFrontmatter(text))) {
+      for (const clause of clausesOf(line)) {
+        if (ABSENCE_CLAUSE.some((pattern) => pattern.test(clause))) continue;
+        const note = (raw: string, backticked: boolean): void => {
+          const ref = normalize(raw, backticked);
+          if (ref !== null) seen.set(ref.path, (seen.get(ref.path) ?? false) || ref.explicit);
+        };
+        for (const span of clause.matchAll(/`([^`\n]+)`/g)) note(span[1] as string, true);
+        for (const word of clause.replace(/`[^`\n]*`/g, ' ').split(/\s+/)) if (word.length > 0) note(word, false);
+      }
+    }
+  }
+  return seen;
+}
+
 // The unique references of several documents, in first-seen order.
 export function referencesOf(texts: Iterable<string>): string[] {
-  const seen = new Set<string>();
-  for (const text of texts) for (const ref of extractPathReferences(text)) seen.add(ref);
-  return [...seen];
+  return [...scanReferences(texts).keys()];
+}
+
+// The references of several documents that a document wrote as an explicit directory (`packages/api/`) or relative form (`./tools/build`): the author means a
+// repository path, so danglingShare counts them even without an extension or a top-level first segment.
+export function explicitReferencesOf(texts: Iterable<string>): string[] {
+  return [...scanReferences(texts)].filter(([, explicit]) => explicit).map(([path]) => path);
 }
 
 // Unique, normalized references in first-seen order.
 export function extractPathReferences(markdown: string): string[] {
-  const seen = new Set<string>();
-  for (const line of withoutFences(stripFrontmatter(markdown))) {
-    for (const clause of clausesOf(line)) {
-      if (ABSENCE_CLAUSE.some((pattern) => pattern.test(clause))) continue;
-      for (const span of clause.matchAll(/`([^`\n]+)`/g)) {
-        const ref = normalize(span[1] as string, true);
-        if (ref !== null) seen.add(ref);
-      }
-      for (const word of clause.replace(/`[^`\n]*`/g, ' ').split(/\s+/)) {
-        if (word.length === 0) continue;
-        const ref = normalize(word, false);
-        if (ref !== null) seen.add(ref);
-      }
-    }
-  }
-  return [...seen];
+  return referencesOf([markdown]);
 }
 
 const IMPORT_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
@@ -173,6 +186,8 @@ export interface ReferenceResolvers {
   moduleNames?: Iterable<string>;
   // `owner/name` of every `uses:` in the committed workflow files.
   actionRefs?: Iterable<string>;
+  // References written as an explicit directory (a trailing slash) or relative form (`./`) in the documents: a repository path even without an extension or a top-level first segment.
+  explicit?: Iterable<string>;
 }
 
 export interface DanglingResult {
@@ -182,6 +197,8 @@ export interface DanglingResult {
   ignored: string[];
   // References that resolved by one of the import, suffix, package and action rules (deferred item 10, second decision).
   byRule: { specifier: string[]; suffix: string[]; module: string[]; action: string[] };
+  // References that do not name a repository path (a model id, a language construct, a zone, a URL); they are in neither `total` nor `dangling`.
+  nonPaths: string[];
   // dangling / total; 0 when there are no references.
   share: number;
 }
@@ -201,9 +218,12 @@ export function danglingShare(
   const files = new Set<string>();
   const directories = new Set<string>();
   const names = new Set<string>();
+  // The first segments of the tree: a slash path with no file extension names a repository path only under one of them (or when written in an explicit form).
+  const topLevel = new Set<string>();
   for (const known of knownPaths) {
     files.add(known);
     const parts = known.split('/');
+    topLevel.add(parts[0] as string);
     names.add(parts.at(-1) as string);
     for (let i = 1; i < parts.length; i += 1) {
       directories.add(parts.slice(0, i).join('/'));
@@ -214,10 +234,22 @@ export function danglingShare(
   for (const glob of ownGlobs) {
     const parts = glob.replace(/[*?].*$/, '').split('/').filter((part) => part !== '');
     for (let i = 1; i <= parts.length; i += 1) directories.add(parts.slice(0, i).join('/'));
+    if (parts.length > 0) topLevel.add(parts[0] as string);
   }
   const ignoredSet = new Set(ignored);
   const moduleSet = new Set(resolvers.moduleNames ?? []);
   const actionSet = new Set(resolvers.actionRefs ?? []);
+  const explicitSet = new Set(resolvers.explicit ?? []);
+  // Whether an unresolved reference plausibly names a repository path. A bare file name is decided by the leaf rule below.
+  const namesRepositoryPath = (ref: string): boolean => {
+    const segments = ref.split('/');
+    if (segments.length === 1) return true;
+    const host = HOST_NAME.exec(segments[0] as string);
+    if (host !== null && !KNOWN_EXTENSIONS.has((host[1] as string).toLowerCase())) return false;
+    if (explicitSet.has(ref)) return true;
+    const extension = /\.([A-Za-z0-9]+)$/.exec(segments.at(-1) as string)?.[1]?.toLowerCase();
+    return (extension !== undefined && KNOWN_EXTENSIONS.has(extension)) || topLevel.has(segments[0] as string);
+  };
   let suffixCounts: Map<string, number> | undefined;
   const suffixes = (): Map<string, number> => {
     if (suffixCounts === undefined) {
@@ -235,6 +267,7 @@ export function danglingShare(
   const unique = [...new Set(refs)];
   const dangling: string[] = [];
   const byIgnoreRule: string[] = [];
+  const nonPaths: string[] = [];
   const byRule = { specifier: [] as string[], suffix: [] as string[], module: [] as string[], action: [] as string[] };
   for (const ref of unique) {
     if (files.has(ref) || directories.has(ref) || (!ref.includes('/') && names.has(ref)) || matchesAny(ref, ownGlobs)) continue;
@@ -245,7 +278,20 @@ export function danglingShare(
     else if (suffixes().get(ref) === 1) byRule.suffix.push(ref);
     else if (moduleSet.has(moduleNameOf(ref))) byRule.module.push(ref);
     else if (actionSet.has(ref)) byRule.action.push(ref);
+    else if (!namesRepositoryPath(ref)) nonPaths.push(ref);
     else dangling.push(ref);
   }
-  return { total: unique.length, dangling, ignored: byIgnoreRule, byRule, share: unique.length === 0 ? 0 : dangling.length / unique.length };
+  // A bare file name is shorthand for the leaf of a longer reference the document also names: known when that reference is ignored, not a path when it is not one.
+  const leafOf = (ref: string): string => ref.slice(ref.lastIndexOf('/') + 1);
+  const ignoredLeaves = new Set(byIgnoreRule.map(leafOf));
+  const nonPathLeaves = new Set(nonPaths.map(leafOf));
+  const stillDangling: string[] = [];
+  for (const ref of dangling) {
+    if (ref.includes('/')) stillDangling.push(ref);
+    else if (ignoredLeaves.has(ref)) byIgnoreRule.push(ref);
+    else if (nonPathLeaves.has(ref)) nonPaths.push(ref);
+    else stillDangling.push(ref);
+  }
+  const total = unique.length - nonPaths.length;
+  return { total, dangling: stillDangling, ignored: byIgnoreRule, byRule, nonPaths, share: total === 0 ? 0 : stillDangling.length / total };
 }

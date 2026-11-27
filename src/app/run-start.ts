@@ -3,11 +3,14 @@
 // runs the static G0 checks and stores run, contract version 1, budget rows and work item `A` in one transaction. Nothing is
 // created before every check has passed, and running the command is the authorization: nothing here waits for input (RC-3).
 // The brief and the conventions are data; neither is read as an instruction to AVARICE.
+import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, mkdirSync, openSync, readSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { parseBrief } from '../domain/brief.ts';
+import { redactSecrets } from '../domain/secret-patterns.ts';
 import { parseConventions } from '../domain/conventions.ts';
 import { canonicalJson } from '../domain/digest.ts';
+import { isRunTerminal } from '../domain/run-lifecycle.ts';
 import { judgeRunPreflight } from '../domain/run-preflight.ts';
 import { compileRunContract, ROUTINE_POLICY } from '../domain/run-contract.ts';
 import type { IndexFacts, RunContract } from '../domain/run-contract.ts';
@@ -17,8 +20,16 @@ import { GSD_ADMITTED_RANGE } from '../ports/gsd-onboarding.ts';
 import type { ConventionsAt } from '../ports/run-source.ts';
 import { budgetRowsOfRun } from './budget.ts';
 import type { AppDeps } from './deps.ts';
+import { recordCompatibility } from './doctor.ts';
+import { profileLimits } from './resource-limits.ts';
+import { profileRetrievalCaps } from './retrieval-guard.ts';
 
 export const BRIEF_MAX_BYTES = 64 * 1024;
+
+// The reference a run keeps to the brief file it was started from (plan 04-20; FR-18): the provider and kind the ledger's task_refs row carries, the file's real
+// path as the provider's ID, and the digest of its bytes as the revision. A resume reads the file again and compares.
+export const BRIEF_REF_PROVIDER = 'manual-brief';
+export const BRIEF_REF_KIND = 'brief-file';
 
 export interface RunStartRequest {
   // The directory `start` was run from; the project is the registered one whose repository contains it.
@@ -31,6 +42,8 @@ export interface RunStartRequest {
   budgetOverrides: Readonly<Record<string, number>>;
   // What the start command read from the indexes before this call (D-07 stage 1); the compiler derives item specs from it.
   indexFacts?: IndexFacts;
+  // `avarice start --restricted` (plan 04-23; CON-4, D-12): the run is analysis and planning only, and its contract says so.
+  restricted?: boolean;
 }
 
 export interface RunStartOutcome {
@@ -81,20 +94,33 @@ export function describeError(error: PortError): string {
 }
 
 const DAY_MS = 86_400_000;
+// The most runs a refusal for the active-run limit names.
+const ACTIVE_RUNS_NAMED = 10;
 const GIT_PREFIX = /^git:/;
 
-// A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8.
-export function readBriefFile(path: string): { ok: true; text: string } | { ok: false; reason: string } {
+// The refusal of a start on a record the installed GSD cannot be used with (S-38): what was built under what, and the one thing to do.
+function incompatibleMessage(repoPath: string, verdict: { incompatible: string; fix: string }): string {
+  return `the active project record of ${repoPath} is incompatible with the installed GSD: ${verdict.incompatible}; ${verdict.fix}`;
+}
+
+// The digest a reference to a brief file keeps: `sha256:` and the SHA-256 of the file's bytes as they were read (not of the decoded text, which drops a byte order mark).
+export const briefBytesDigest = (bytes: Uint8Array): string => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+
+// A regular file of at most BRIEF_MAX_BYTES, decoded as strict UTF-8. `bytesDigest` is the digest of the bytes that were decoded.
+// A failure carries a `code`: the operating system's error code (`ENOENT`, `EACCES`) when the file could not be opened, so a resume can tell a deleted brief from
+// a denied one, or `NOT_FILE`, `TOO_LARGE` or `NOT_UTF8` when it opened but is not a brief.
+export function readBriefFile(path: string): { ok: true; text: string; bytesDigest: string } | { ok: false; reason: string; code?: string } {
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY);
   } catch (e) {
-    return { ok: false, reason: `cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})` };
+    const code = (e as NodeJS.ErrnoException).code;
+    return { ok: false, reason: `cannot be read (${code ?? 'error'})`, ...(code !== undefined ? { code } : {}) };
   }
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile()) return { ok: false, reason: 'is not a regular file' };
-    if (stat.size > BRIEF_MAX_BYTES) return { ok: false, reason: `is larger than ${BRIEF_MAX_BYTES} bytes` };
+    if (!stat.isFile()) return { ok: false, reason: 'is not a regular file', code: 'NOT_FILE' };
+    if (stat.size > BRIEF_MAX_BYTES) return { ok: false, reason: `is larger than ${BRIEF_MAX_BYTES} bytes`, code: 'TOO_LARGE' };
     const buffer = Buffer.alloc(stat.size);
     let offset = 0;
     while (offset < buffer.length) {
@@ -103,16 +129,16 @@ export function readBriefFile(path: string): { ok: true; text: string } | { ok: 
       offset += n;
     }
     try {
-      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset)) };
+      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset)), bytesDigest: briefBytesDigest(buffer.subarray(0, offset)) };
     } catch {
-      return { ok: false, reason: 'is not valid UTF-8' };
+      return { ok: false, reason: 'is not valid UTF-8', code: 'NOT_UTF8' };
     }
   } finally {
     closeSync(fd);
   }
 }
 
-function canonicalOrSelf(path: string): string {
+export function canonicalOrSelf(path: string): string {
   try {
     return realpathSync(path);
   } catch {
@@ -174,14 +200,25 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   // A run is a GSD unit (FR-4): without an admitted gsd-core there is nothing to run, so nothing is created (RC-1).
   if (deps.gsd === undefined) {
     const problem = deps.gsdProblem;
+    // S-38: a project that already has an active record built under a GSD is told that the record is incompatible with what is installed now, and what to do about it.
+    // Derived here exactly as `doctor` derives it; nothing is written.
+    const known = findProject(deps, request);
+    if ('project' in known) {
+      const existing = deps.ledger.getActiveRecord(known.project.projectId);
+      if (existing.ok && existing.value !== null) {
+        const verdict = recordCompatibility({ gsdVersion: existing.value.gsdVersion }, undefined, problem?.found);
+        if (verdict !== 'compatible') return refused('record-incompatible', incompatibleMessage(known.project.repoPath, verdict));
+      }
+    }
     return refused('gsd-not-admitted', `GSD ${GSD_ADMITTED_RANGE} was not found${problem !== undefined ? ` (${problem.found}; admitted: ${problem.admitted})` : ''}`);
   }
 
-  // The brief is untrusted data: parsed and validated, never obeyed.
+  // The brief is untrusted data: parsed and validated, never obeyed. What a person typed into it becomes the title, the work items and the contract, so a secret
+  // pasted into it is replaced by its `[REDACTED:<kind>]` marker before any of that is stored (SEC-3, AC-5); the digest that tells a changed file stays the one of the bytes.
   const read = readBriefFile(resolve(request.cwd, request.briefPath));
   if (!read.ok) return usage('brief', `brief ${request.briefPath} ${read.reason}`);
   const briefName = request.briefPath.split(/[\\/]/).pop() ?? 'brief';
-  const brief = parseBrief(read.text, { kind: 'file', id: briefName });
+  const brief = parseBrief((deps.redact ?? redactSecrets)(read.text), { kind: 'file', id: briefName });
   if (!brief.ok) return usage(brief.error.kind === 'invalid' ? brief.error.field : 'brief', describeError(brief.error));
 
   const found = findProject(deps, request);
@@ -192,6 +229,19 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   if (!active.ok) return internal(describeError(active.error));
   const record: ActiveRecord | null = active.value;
   if (record === null) return refused('no-active-record', `${project.repoPath} has no active project record; onboard it first (avarice onboard --policy onboarding ${project.repoPath})`);
+  // S-38, T-04-70: a record built under one GSD is not reinterpreted under another. The check is derived from the located GSD and the version the record carries (it is never
+  // written to the record), and it comes before anything is created.
+  const inspected = deps.gsd.inspect();
+  const compatibility = recordCompatibility({ gsdVersion: record.gsdVersion }, inspected.ok ? { version: inspected.value.version } : undefined, inspected.ok ? undefined : describeError(inspected.error));
+  if (compatibility !== 'compatible') return refused('record-incompatible', incompatibleMessage(project.repoPath, compatibility));
+  // A map made under the restricted launch is a partial map that nothing contained its mapper (plan 04-24; CON-4, T-04-65): it is never taken for the whole-repository, contained map a
+  // contained run is planned from, so only a restricted run may start on it. The owner replaces it with a contained onboarding on an enforced host.
+  if (record.body['restricted'] === true && request.restricted !== true) {
+    return refused(
+      'restricted-record',
+      `the active project record of ${project.repoPath} was made by a restricted onboarding (partial (restricted)); a contained run needs a contained map: onboard it on an enforced host with avarice onboard --policy onboarding ${project.repoPath}, or start the run with --restricted`,
+    );
+  }
   const pin = record.onboardedRevision.replace(GIT_PREFIX, '');
 
   // The facts come from repository objects only (D-04, D-16): an uncommitted edit, a dirty checkout or a half-written file
@@ -232,6 +282,26 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
   const conventions = parseConventions(conventionsAt.text);
   if (!conventions.ok) return refused('conventions-invalid', `.avarice/config.json at ${conventionsAt.revision.slice(0, 7)} is invalid: ${describeError(conventions.error)}`);
 
+  // The profile's retrieval caps are the ceilings of the contract's retrieval budgets (plan 04-28; D-09): a section that cannot be read is a refusal, not a silent default.
+  const retrievalCaps = profileRetrievalCaps(deps);
+  if (!retrievalCaps.ok) return usage(retrievalCaps.error.kind === 'invalid' ? retrievalCaps.error.field : 'retrieval', describeError(retrievalCaps.error));
+
+  // OPS-5: a profile may have `limits.maxActiveRuns` runs that have not ended (not failed, cancelled or closed). At the limit the start is refused, before anything is created,
+  // and the refusal names the runs the owner can close. A section that cannot be read is the start's usage error, as the retrieval section is.
+  const limits = profileLimits(deps);
+  if (!limits.ok) return usage(limits.error.kind === 'invalid' ? limits.error.field : 'limits', describeError(limits.error));
+  const all = deps.ledger.listRuns();
+  if (!all.ok) return internal(describeError(all.error));
+  const notEnded = all.value.filter((row) => !isRunTerminal(row.state));
+  if (notEnded.length >= limits.value.maxActiveRuns) {
+    const named = notEnded.slice(0, ACTIVE_RUNS_NAMED).map((row) => `${row.runId} (${row.state})`);
+    const more = notEnded.length > named.length ? ` and ${notEnded.length - named.length} more` : '';
+    return refused(
+      'active-runs',
+      `${notEnded.length} runs have not ended and limits.maxActiveRuns is ${limits.value.maxActiveRuns}: ${named.join(', ')}${more}; close one with avarice cancel <run> or see avarice status, then start again`,
+    );
+  }
+
   const runId = deps.ids.next('run_');
   const compiled = compileRunContract({
     runId,
@@ -242,8 +312,10 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     conventions: conventions.value,
     nowIso: new Date(nowMs).toISOString(),
     policy: request.policy,
+    retrievalCaps: retrievalCaps.value,
     ...(Object.keys(request.budgetOverrides).length > 0 ? { budgetOverrides: request.budgetOverrides } : {}),
     ...(request.indexFacts !== undefined ? { indexFacts: request.indexFacts } : {}),
+    ...(request.restricted === true ? { mode: 'restricted' as const } : {}),
   });
   if (!compiled.ok) return usage(compiled.error.kind === 'invalid' ? compiled.error.field : 'contract', describeError(compiled.error));
   const { contract, digest } = compiled.value;
@@ -256,6 +328,13 @@ export function startRun(deps: AppDeps, request: RunStartRequest): RunStartResul
     workItems: contract.intent.workItems.map((item) => ({ runId, itemId: item.id, type: 'implement' as const, dependsOn: item.dependsOn, size: item.size, model: item.model, spec: item, nowMs })),
   });
   if (!created.ok) return internal(describeError(created.error));
+  // What the run was built from is recorded with it: a resume refreshes the brief file against this digest (S-5). A run whose reference cannot be
+  // recorded would resume on text nobody compared, so the failure is the start's.
+  const briefPath = canonicalOrSelf(resolve(request.cwd, request.briefPath));
+  const briefRef = deps.ledger.recordTaskRefs(runId, [
+    { provider: BRIEF_REF_PROVIDER, kind: BRIEF_REF_KIND, id: briefPath, revision: read.bytesDigest, retrievedAt: new Date(nowMs).toISOString(), scope: briefPath, freshness: 'fresh' },
+  ]);
+  if (!briefRef.ok) return internal(`run ${runId} is stored but its brief reference could not be recorded: ${describeError(briefRef.error)}`);
 
   // The ledger holds the run now. A failure past this point leaves the run `contract_ready` without its file; the supervisor
   // (plan 02-12) rewrites the file from the ledger before it launches anything.

@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts';
 import { sandboxSetup } from '../../src/app/checks.ts';
 import type { AppDeps } from '../../src/app/deps.ts';
+import { createDeps } from '../../src/cli/composition.ts';
 import type { RunRow } from '../../src/ports/ledger.ts';
 import type { CommandResult, CommandSpec } from '../../src/ports/command-executor.ts';
 import { TEST_PATH } from '../helpers/sandbox.ts';
@@ -50,7 +51,7 @@ before(() => {
   writeFileSync(join(dirs.otherWork, 'run_C/clone/src/c.ts'), 'other profile clone');
   writeFileSync(join(outside, 'canary'), 'outside the default parents');
   own = { dataRoot: dirs.ownData, workRoot: dirs.ownWork, clone: join(dirs.ownWork, 'run_A/clone'), scratch: join(dirs.ownWork, 'run_A/scratch') };
-  deps = { home, profile: { dataRoot: own.dataRoot, workRoot: own.workRoot } } as unknown as AppDeps;
+  deps = { home, profile: { dataRoot: own.dataRoot, workRoot: own.workRoot, otherRoots: [] } } as unknown as AppDeps;
 });
 after(() => rmSync(base, { recursive: true, force: true }));
 
@@ -151,17 +152,181 @@ describe('the sandbox of a run command denies the default AVARICE parents (cs7-o
     assert.equal(node.stdout, 'own clone');
   });
 
-  it('documented limit: a profile whose roots sit outside the default parents is not covered', async () => {
-    const custom = { ...deps, profile: { dataRoot: join(outside, 'custom-data'), workRoot: join(outside, 'custom-work') } } as unknown as AppDeps;
+  // Plan 04-12 closed the limit for every profile whose config this one can read (the describe below). What stays open is a profile this one was
+  // never told about: with no roots in deps.profile.otherRoots the sandbox cannot name it.
+  it('residual: a profile whose config was never seen here, so named in no otherRoots, is not covered', async () => {
+    const custom = { ...deps, profile: { dataRoot: join(outside, 'custom-data'), workRoot: join(outside, 'custom-work'), otherRoots: [] } } as unknown as AppDeps;
     mkdirSync(join(outside, 'custom-data'), { recursive: true });
     mkdirSync(join(outside, 'custom-work/run_A/clone'), { recursive: true });
     writeFileSync(join(outside, 'other-profile-custom-data'), 'a profile placed elsewhere by AVARICE_DATA_ROOT');
     const sandbox = sandboxSetup(custom, run, join(outside, 'custom-work/run_A/clone'));
     assert.ok(sandbox.ok);
     assert.equal(sandbox.value.denyReadPaths.includes(join(outside, 'other-profile-custom-data')), false);
+    assert.deepEqual(custom.profile.otherRoots, []);
     const result = await new SandboxedExecutor().run({ ...command(['/bin/cat', join(outside, 'other-profile-custom-data')]), denyReadPaths: sandbox.value.denyReadPaths, allowReadPaths: sandbox.value.allowReadPaths, cwd: join(outside, 'custom-work/run_A/clone') });
     assert.ok(result.ok);
-    assert.equal(result.value.exitCode, 0, 'outside the default parents and the own roots: readable, as documented');
+    assert.equal(result.value.exitCode, 0, 'outside the default parents, the own roots and every known profile: readable, as documented');
+  });
+});
+
+// Plan 04-12 (D-19, T-04-30). A profile whose data root, work root or config home were moved by an environment variable is named only by its own config.json,
+// which is written once with the roots in use. The composition reads those configs, and every sandbox a run's commands use denies what they name.
+describe('composition and the sandbox setup deny the moved roots of every other profile (D-19, T-04-30)', () => {
+  let moved = '';
+  let acme: { data: string; work: string };
+  let composedDefault: ReturnType<typeof createDeps> | undefined;
+  let composedMoved: ReturnType<typeof createDeps> | undefined;
+  let movedConfigHome = '';
+  let defaultConfigHome = '';
+  let homeDir = '';
+  let rootBase = '';
+
+  function envFor(extra: Record<string, string>): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, CLAUDE_CONFIG_DIR: join(homeDir, '.claude'), AVARICE_CLAUDE_BIN: '/nonexistent/avarice-test-has-no-claude', ...extra };
+    for (const name of ['AVARICE_CONFIG_HOME', 'AVARICE_DATA_ROOT', 'AVARICE_WORK_ROOT', 'AVARICE_PROFILE']) if (!(name in extra)) delete env[name];
+    return env;
+  }
+
+  before(() => {
+    rootBase = realpathSync(mkdtempSync(join(tmpdir(), 'avarice-moved-roots-')));
+    homeDir = join(rootBase, 'home');
+    moved = join(rootBase, 'moved');
+    acme = { data: join(moved, 'acme-data'), work: join(moved, 'acme-work') };
+    defaultConfigHome = join(homeDir, '.config', 'avarice');
+    movedConfigHome = join(rootBase, 'moved-config');
+    mkdirSync(join(acme.work, 'run_Z/clone'), { recursive: true });
+    mkdirSync(acme.data, { recursive: true });
+    writeFileSync(join(acme.data, 'state.db'), 'CANARY-ACME-DATA');
+    writeFileSync(join(acme.work, 'run_Z/clone/secret.txt'), 'CANARY-ACME-CLONE');
+    mkdirSync(join(defaultConfigHome, 'profiles', 'enterprise-acme'), { recursive: true });
+    writeFileSync(join(defaultConfigHome, 'profiles', 'enterprise-acme', 'config.json'), JSON.stringify({ schema: 1, profile: 'enterprise-acme', dataRoot: acme.data, workRoot: acme.work }));
+    composedDefault = createDeps(envFor({}), {}, { profile: 'personal-local' });
+    composedMoved = createDeps(
+      envFor({ AVARICE_CONFIG_HOME: movedConfigHome, AVARICE_DATA_ROOT: join(rootBase, 'moved-own-data'), AVARICE_WORK_ROOT: join(rootBase, 'moved-own-work') }),
+      {},
+      { profile: 'personal-local' },
+    );
+  });
+  after(() => {
+    if (composedDefault?.ok === true) composedDefault.value.close();
+    if (composedMoved?.ok === true) composedMoved.value.close();
+    rmSync(rootBase, { recursive: true, force: true });
+  });
+
+  function depsOf(composed: ReturnType<typeof createDeps> | undefined): AppDeps {
+    assert.ok(composed?.ok === true, composed?.ok === false ? composed.message : 'not composed');
+    return composed.value.deps;
+  }
+
+  it('fills deps.profile.otherRoots with the moved roots of another profile and the config home, and none of its own data or work root', () => {
+    const profile = depsOf(composedDefault).profile;
+    assert.ok(profile.otherRoots.includes(acme.data), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(acme.work), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(defaultConfigHome));
+    assert.equal(profile.otherRoots.includes(profile.dataRoot), false);
+    assert.equal(profile.otherRoots.includes(profile.workRoot), false);
+  });
+
+  it('names this profile own config home and the default one when its own was moved, and still finds the other profile in the default one', () => {
+    const profile = depsOf(composedMoved).profile;
+    assert.ok(profile.otherRoots.includes(movedConfigHome), JSON.stringify(profile.otherRoots));
+    assert.ok(profile.otherRoots.includes(defaultConfigHome));
+    assert.ok(profile.otherRoots.includes(acme.data));
+  });
+
+  it('the sandbox of a declared check, a validation, the baseline and npm ci denies those roots, and re-allows only the run clone and scratch', () => {
+    const d = depsOf(composedMoved);
+    const clone = join(d.profile.workRoot, 'run_A', 'clone');
+    mkdirSync(clone, { recursive: true });
+    const sandbox = sandboxSetup(d, run, clone);
+    assert.ok(sandbox.ok, JSON.stringify(sandbox));
+    for (const path of [acme.data, acme.work, movedConfigHome, defaultConfigHome]) assert.ok(sandbox.value.denyReadPaths.includes(path), path);
+    assert.deepEqual(sandbox.value.allowReadPaths, [realpathSync(clone), sandbox.value.scratch]);
+  });
+
+  // CS-7 (the live case of plan 02-20), for a profile moved off the default parents: a declared check, run in the real SandboxedExecutor with the deny
+  // paths of the run, reads a file inside the other profile's moved data root. AC-6 needs 0 such reads.
+  describe('through the real sandbox (CS-7, AC-6)', { skip: !SANDBOX_AVAILABLE }, () => {
+    const READ = ['-e', 'try { process.stdout.write(require("node:fs").readFileSync(process.argv[1], "utf8")); } catch (e) { process.stderr.write(String(e.code) + ": " + String(e.message)); process.exit(7); }'];
+    let clone = '';
+    let sandbox: ReturnType<typeof sandboxSetup>;
+
+    before(() => {
+      const d = depsOf(composedMoved);
+      clone = join(d.profile.workRoot, 'run_A', 'clone');
+      mkdirSync(join(clone, 'src'), { recursive: true });
+      writeFileSync(join(clone, 'src', 'own.txt'), 'CANARY-OWN-CLONE');
+      sandbox = sandboxSetup(d, run, clone);
+    });
+
+    async function check(argv: readonly string[]): Promise<CommandResult> {
+      assert.ok(sandbox.ok, JSON.stringify(sandbox));
+      const spec: CommandSpec = {
+        argv,
+        cwd: clone,
+        env: { ...sandbox.value.env, PATH: TEST_PATH },
+        timeoutMs: 20_000,
+        invocationId: 'test',
+        writePaths: [sandbox.value.scratch],
+        denyReadPaths: sandbox.value.denyReadPaths,
+        allowReadPaths: sandbox.value.allowReadPaths,
+      };
+      const result = await new SandboxedExecutor().run(spec);
+      assert.ok(result.ok, JSON.stringify(result));
+      return result.value;
+    }
+
+    // A denial is a command that ran to its end and failed on a permission error: not a timeout or a cancellation (exitCode null), not a program that is missing or broken
+    // (a different message), and not a refusal that has nothing to do with the sandbox.
+    async function denied(argv: readonly string[]): Promise<CommandResult> {
+      const result = await check(argv);
+      const label = argv.join(' ');
+      assert.equal(result.status, 'failed', `${label}: the command ended as ${result.status}, not as a failure`);
+      assert.notEqual(result.exitCode, 0, label);
+      assert.match(result.stderr, /Operation not permitted|Permission denied/i, `${label}: the failure is a permission failure`);
+      return result;
+    }
+
+    it('a check reading a file in another profile moved data root fails with a permission error and its output holds no content of the file', async () => {
+      const result = await denied([process.execPath, ...READ, join(acme.data, 'state.db')]);
+      assert.match(result.stderr, /EPERM|EACCES/);
+      assert.equal(`${result.stdout}${result.stderr}`.includes('CANARY-ACME-DATA'), false);
+    });
+
+    it('the same holds for the moved work root, for listing either root, and for the config home that names them', async () => {
+      const work = await denied([process.execPath, ...READ, join(acme.work, 'run_Z/clone/secret.txt')]);
+      assert.equal(`${work.stdout}${work.stderr}`.includes('CANARY-ACME-CLONE'), false);
+      await denied(['/bin/ls', acme.data]);
+      await denied(['/bin/ls', acme.work]);
+      await denied(['/bin/ls', join(defaultConfigHome, 'profiles')]);
+      await denied(['/bin/cat', join(defaultConfigHome, 'profiles', 'enterprise-acme', 'config.json')]);
+      await denied(['/bin/ls', movedConfigHome]);
+    });
+
+    it('a symbolic link in the clone to the moved data root does not read through', async () => {
+      symlinkSync(acme.data, join(clone, 'link-to-acme'));
+      const result = await denied([process.execPath, ...READ, join(clone, 'link-to-acme', 'state.db')]);
+      assert.equal(`${result.stdout}${result.stderr}`.includes('CANARY-ACME-DATA'), false);
+    });
+
+    // The controls of the denial cases above: the same binaries run under the same sandbox and succeed on a path it allows, so the denials come from the deny list and not
+    // from a sandbox that cannot run /bin/ls or /bin/cat at all.
+    it('control: /bin/ls lists the run own clone and /bin/cat reads a file in it under the same sandbox', async () => {
+      const listed = await check(['/bin/ls', clone]);
+      assert.equal(listed.status, 'passed', listed.stderr);
+      assert.equal(listed.exitCode, 0, listed.stderr);
+      assert.match(listed.stdout, /\bsrc\b/);
+      const read = await check(['/bin/cat', join(clone, 'src', 'own.txt')]);
+      assert.equal(read.status, 'passed', read.stderr);
+      assert.equal(read.exitCode, 0, read.stderr);
+      assert.equal(read.stdout, 'CANARY-OWN-CLONE');
+    });
+
+    it('the same script reads a file inside the run own clone', async () => {
+      const result = await check([process.execPath, ...READ, join(clone, 'src', 'own.txt')]);
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(result.stdout, 'CANARY-OWN-CLONE');
+    });
   });
 });
 

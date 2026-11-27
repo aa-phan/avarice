@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "kind": "avarice-ac8-rejudgement",
+  "decision": "ADR-016",
+  "boundPercent": 95,
+  "sourceSha256": "3b40148356b2f2dd7420d18ed6e6d36b7e6d73378fe8f4d52deeba5fa9e5b5e8",
+  "arms": {
+    "A": {
+      "runs": 6,
+      "success": 2,
+      "tokens": 19833920,
+      "shareOfA": 1
+    },
+    "B": {
+      "runs": 6,
+      "success": 4,
+      "tokens": 18715894,
+      "shareOfA": 0.9436
+    },
+    "C": {
+      "runs": 6,
+      "success": 4,
+      "tokens": 17557851,
+      "shareOfA": 0.8852
+    }
+  },
+  "verdict": {
+    "pass": true,
+    "via": "B",
+    "reason": "arm B succeeds at least as often as A at 94.4% of A's tokens",
+    "arms": {
+      "B": {
+        "successOk": true,
+        "tokensOk": true,
+        "tokenShare": 0.9436306085735952
+      },
+      "C": {
+        "successOk": true,
+        "tokensOk": true,
+        "tokenShare": 0.8852436129620368
+      }
+    }
+  },
+  "knowledge": {
+    "outcome": "on",
+    "reason": "arm C does not cost more tokens than B"
+  }
+}

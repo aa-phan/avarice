@@ -2,6 +2,7 @@
 // gets the network itself: the sandbox allows one loopback port (CommandSpec.allowLoopbackPorts) and the proxy listening
 // there admits only an exact `host:port` allowlist. The proxy lives for one step; it is never given to an agent invocation.
 import type { Result } from '../domain/result.ts';
+import type { CapabilityDescriptor } from './capability.ts';
 
 // One connection attempt as the proxy saw it: the target host and port, never a path or a header. `host` is `invalid` and
 // `port` is 0 when the request named no usable target.
@@ -22,6 +23,8 @@ export interface EgressProxyHandle {
 }
 
 export interface EgressProxy {
+  // What the adapter can do (FR-16); composition records it and a step requirement can name it.
+  readonly descriptor: CapabilityDescriptor;
   // `allow` holds exact `host:port` values (host compared lower-case); an entry that is not host:port is `invalid`.
   start(input: { allow: readonly string[]; onAttempt?: (attempt: EgressAttempt) => void }): Promise<Result<EgressProxyHandle>>;
 }

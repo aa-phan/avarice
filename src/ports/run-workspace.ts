@@ -7,6 +7,7 @@
 // Nothing here writes to the user's checkout except `fetchIntoSource`, and that creates exactly one ref
 // (`refs/heads/avarice/<runId>`): no checkout, no reset, no clean, no index or working-tree change.
 import type { Result } from '../domain/result.ts';
+import type { CapabilityDescriptor } from './capability.ts';
 
 export interface PrepareRunInput {
   // The user's repository; prepare never writes to it.
@@ -110,6 +111,8 @@ export interface ParkRecord {
 }
 
 export interface RunWorkspace {
+  // What the adapter can do (FR-16); composition records it and a step requirement can name it.
+  readonly descriptor: CapabilityDescriptor;
   // Clone at the pin, on `avarice/<runId>`, built in clone.partial and renamed when complete.
   prepare(input: PrepareRunInput): Result<RunWorkspaceInfo>;
   // ONB-10: a scratch clone of the source at the pin, detached, with no branch, where a declared check is run to see what it writes. Returns its
@@ -158,6 +161,11 @@ export interface RunWorkspace {
   // Deletes untracked files (a file or a link, never a directory, never through a symlink) and then the directories they leave empty,
   // up to but not including the clone root. A path that exists at HEAD is refused (`conflict`) and nothing is changed. Returns the files removed.
   removeUntracked(path: string, relPaths: readonly string[]): Result<string[]>;
+  // Plan 04-23 (restricted mode): the clone's working content (tracked and untracked, not ignored) compared with HEAD as one patch (the binary patch form), leaving
+  // out the listed clone-relative directories (`exclude`, plain directory names only) and the listed clone-relative files (`excludePaths`, any name git can hold:
+  // each is left out literally, so `*`, `[`, `:` or a leading `-` are ordinary characters; `invalid` for an entry that is empty, absolute, holds NUL or has a `..` segment).
+  // The clone's index is not touched and nothing is written to the clone.
+  patch(path: string, options: { exclude: readonly string[]; excludePaths?: readonly string[] }): Result<string>;
   // What changed between two commits, by path (the diff gate of G4 reads `<pin> HEAD`).
   diffCommits(path: string, from: string, to: string): Result<PathChange[]>;
   // UTF-8 text of a clone file; null when absent; refuses traversal, absolute paths and symlinks that leave the clone.

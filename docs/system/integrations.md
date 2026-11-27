@@ -1,6 +1,6 @@
 # Integrations
 
-This document describes the adapter modules under `src/adapters/`, the port interfaces under `src/ports/`, the composition root `src/cli/composition.ts`, the dependency container `src/app/deps.ts` and the supervisor launcher `src/cli/spawn-supervisor.ts`. The banner adapter (`src/adapters/notify/local-notifier.ts`), the LaunchAgent writer (`src/adapters/schedule/launchd.ts`) and the process ancestry reader (`src/adapters/proc/ancestry.ts`) are among those adapters. Together they carry every runtime contact between AVARICE and an external system.
+This document describes the adapter modules under `src/adapters/`, the port interfaces under `src/ports/`, the composition root `src/cli/composition.ts`, the dependency container `src/app/deps.ts` and the supervisor launcher `src/cli/spawn-supervisor.ts`. The banner adapter (`src/adapters/notify/local-notifier.ts`), the LaunchAgent writer (`src/adapters/schedule/launchd.ts`), the process ancestry reader (`src/adapters/proc/ancestry.ts`), the credential providers (`src/adapters/credential/`), the context sources (`src/adapters/context/`) and the writer of the attended hook entry (`src/adapters/host-claude/attended-hook-install.ts`) are among those adapters. Together they carry every runtime contact between AVARICE and an external system.
 
 ## Summary
 
@@ -8,8 +8,11 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 
 | System | Direction | Protocol | Version expectation | When missing or wrong |
 |---|---|---|---|---|
-| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume` | exactly 2.1.312, 2.1.316, 2.1.317, 2.1.318 or 2.1.319 | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure |
-| Claude configuration directory | AVARICE writes one file; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` written by `install-host`; GSD and user skills read | none | `install-host` refuses a link or an unmarked file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
+| Claude Code (`claude`) | AVARICE spawns it; it spawns the hook, which calls into AVARICE | `claude -p` with stream-json on stdout; settings, agents, plugin and MCP files on disk; a paused session continued with `--resume`; `claude --help` read for the flags the launch line uses | a verified version, or an unverified patch of the verified minor while its help lists the flags (the list is in [containment.md](containment.md#refusals-before-launch)) | production host is replaced by one that refuses every invocation; onboarding and runs block as an enforcement failure, and `--restricted` is the way to analysis and planning only |
+| Claude configuration directory | AVARICE writes two files; the host adapter reads skills and a guard script | `skills/avarice-run/SKILL.md` and the attended hook entry in `settings.json`, written by `install-host`; GSD and user skills read | none | `install-host` refuses a link, an unmarked skill or an unusable settings file (exit 3), refuses a run environment or bad arguments (exit 64) or fails (exit 70); a missing skill fails the invocation |
+| `/usr/bin/security` | a `keychain:` credential reference spawns it, macOS only | `find-generic-password -s <service> -w`; the value arrives on stdout | any macOS | the reference does not resolve and the failure is recorded in the `credential.resolve` event |
+| A credential helper | a `cmd:` reference runs one executable the profile approved | the helper's path is the whole argument list; stdout, trimmed, is the credential; stdout cut at 16 KiB is refused as too large, and stderr is never read; a helper the profile does not list is refused (`credential-helper-not-listed`), and a helper that runs past 5 seconds fails | none | the reference does not resolve |
+| A vendor CLI | `doctor --online` runs `<cli> auth status` for each `delegated:<cli>` reference | exit status of the named CLI | none | doctor reports the CLI missing, timed out or failing, and that is a finding |
 | GSD (`@opengsd/gsd-core`) | AVARICE spawns `gsd-tools.cjs` under Node; Claude Code runs GSD's own shell shim inside the host; a run drives GSD's quick workflow through the host | JSON on stdout, one verb per process | 1.17.x only | no GSD adapter; onboarding stops as incompatible; no host |
 | git | AVARICE spawns it | argv arrays, minimal environment, plain-text output | none checked | the failing call returns an error; the run or onboarding stops at that step |
 | User's source repository | AVARICE reads it through git; the run hand-off writes one branch ref into it | `git` against the repository's object database | none | the hand-off fails with a conflict or an error; the run stays unhanded |
@@ -17,7 +20,7 @@ AVARICE drives its tools by spawning processes. The only network traffic it brok
 | graphify | AVARICE spawns it, sandboxed | `extract` and `cluster-only`, files on disk | 0.9.x documented, not enforced | the code-graph and knowledge indexes are recorded absent; onboarding continues |
 | `sandbox-exec` | AVARICE spawns it as a wrapper | Seatbelt profile on argv | any macOS where a probe profile applies | no command runs; no unsandboxed fallback |
 | `mount` | AVARICE spawns it | text table on stdout | none | profile preparation fails closed |
-| `pgrep` and `ps` | AVARICE spawns them | text on stdout | none | reaping reports unavailable; an owner command that cannot read the process chain refuses |
+| `pgrep` and `ps` | AVARICE spawns them | text on stdout; `ps` also reads the elapsed time of the process that holds the profile bindings lock (`ps -o etime= -p <pid>`, 1 second timeout, `PATH` and `LC_ALL` alone) | none | reaping reports unavailable; an owner command that cannot read the process chain refuses; the bindings lock falls back to the age of its file (see [profiles-and-credentials.md](profiles-and-credentials.md#selecting-a-profile)) |
 | `osascript` | AVARICE spawns it once per banner | a fixed three-line AppleScript, with the text as arguments | any macOS; the path comes from the profile config | the attempt is recorded as `osascript-missing`, `osascript-timeout` or `osascript-failed`; the decision stays in `inbox` |
 | `launchctl` | `schedule` spawns it | `bootstrap` and `bootout` of `gui/<uid>` jobs | any macOS | `schedule` exits 70 and quotes the first line of the tool's error |
 | `plutil` | `schedule install` spawns it | `-lint` of the property list before it is installed | any macOS | `schedule install` exits 70 and installs nothing |
@@ -32,14 +35,14 @@ The spawn sites are these:
 
 - `sandbox-exec` (probe and wrapper), git, and `claude` (launch and `--version`).
 - `node` for the gsd-core identity check, for the hook self-test and for the detached supervisor.
-- `pgrep`, and `ps` (reaping and the process chain).
+- `pgrep`, and `ps` (reaping, the process chain and the start of a bindings lock holder).
 - `mount`, `osascript`, `launchctl` and `plutil`.
 
 GSD verbs and graphify do not spawn directly; they go through the sandboxed executor. No source file spawns `gh`.
 
 ## Ports and wired adapters
 
-The ports directory holds twelve ports and one shared type (the capability descriptor every adapter publishes). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of the command executor, graph tool, GSD adapter (when present) and agent host are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The three run ports have no descriptor and are not recorded. The notifier has a descriptor that composition does not record.
+The ports directory holds the adapter ports and three support files. The descriptors, the step requirements and the portability proof are in [portability.md](portability.md). Composition wires one production adapter per port. It substitutes a refusing host when the host is not admitted, leaves out the GSD adapter when none is found and leaves out the context sources when they are absent. A worktree staging adapter exists and is never selected. The descriptors of every adapter it builds are written to the ledger by every command that is not read-only. A later reader therefore sees which adapter and enforcement level a profile ran with. The notifier has a descriptor that composition does not record, and the restricted host is built beside the host and never recorded. The names are listed in [data-model.md](data-model.md#adapter-descriptors).
 
 | Port | Production adapter | Test-only adapters |
 |---|---|---|
@@ -47,13 +50,14 @@ The ports directory holds twelve ports and one shared type (the capability descr
 | Command executor | `sandbox-exec` executor | an executor that runs commands directly for a test already inside an outer sandbox, injected only by the test entry point |
 | Graph tool | graphify adapter | a fake `graphify` executable |
 | GSD onboarding | gsd-tools adapter, present only when an admitted gsd-core is located | a fake gsd-core tree |
-| Context source | two adapters, intel and graph, built only when the GSD adapter exists; both read through GSD's own readers | none |
+| Context source | up to four adapters, selected by the profile: intel, graph, planning sections and file search; all four are built only when the GSD adapter exists, and the first two read through GSD's own readers. Each descriptor declares `refresh` | none |
+| Credential provider | `keychain`, `cmd` and `delegated`, the ones the profile's class allows | none |
 | Staging workspace | local clone (the strategy is a single constant) | the worktree adapter exists behind the same port and runs the shared contract tests, but no production path selects it |
 | Run source | git adapter that reads repository objects only | none |
 | Run workspace | local-clone adapter for one run | none |
 | Egress proxy | in-process allowlisting `CONNECT` proxy | a proxy injected only by the test entry point, for a registry that is a local server on a port the conventions cannot name |
 | Ledger | SQLite ledger | none |
-| Artifact store | local content-addressed file store | none |
+| Artifact store | local content-addressed file store, wrapped so that text kinds are redacted before they are stored | the fake-remote store of the portability proof, injected through the same override |
 | Notifier | local macOS banner through `osascript` (see [osascript](#osascript)); built by every composition that is not read-only | a silent notifier that a test entry passes, or the real one pointed at a fake script |
 
 The production entry point never passes the host, executor or egress overrides; only test entry points do. The three run ports are built on every composition, including a read-only one, because building them executes nothing. A read-only command (`status`) builds the refusing host without a reason, runs no sandbox probe and never launches a host; it locates GSD only when it asks to (the `context` command does). The dependency container carries the run ports as optional members, so a hand-built container in an onboarding test need not supply them; a composed container always has all three.
@@ -67,7 +71,7 @@ A command is described by its argv (no shell), working directory, whole environm
 
 ### Ledger port
 
-The ledger port also carries the run operations. They cover runs and their lease, checkpoints, contracts and amendments, steps, attempts, evidence, gate results, work items, decisions, notifications, the cancel request, check validations, run events and the hook's read-before-edit rows. Their lifecycle is in [runs.md](runs.md) and their storage in [data-model.md](data-model.md). One more adapter-config row, named `host-skill:avarice-run` with port `host-skill`, is written by `install-host` and holds the digest of the installed skill. `host-skill` is not a port in the ports directory.
+The ledger port also carries the run operations. They cover runs and their lease, checkpoints, contracts and amendments, steps, attempts, evidence, gate results, work items, decisions, notifications, the cancel request, check validations, run events and the hook's read-before-edit rows. Their lifecycle is in [runs.md](runs.md) and their storage in [data-model.md](data-model.md). `install-host` writes two adapter-config rows: `host-skill:avarice-run` (port `host-skill`) holds the digest of the installed skill, and `host-hook:attended` (port `host-hook`) holds the entry's digest. Neither port is in the ports directory.
 
 ### Agent host port fields
 
@@ -81,18 +85,11 @@ AVARICE spawns the host headlessly, once per contained invocation (map, intel, k
 
 `claude -p <prompt> --setting-sources "" --settings <file> --plugin-dir <dir> --agents <file> [--agent <name>] --permission-mode dontAsk --permission-prompts none --strict-mcp-config --mcp-config <file> --allowedTools Glob,Grep --model <m> --max-budget-usd <n> --output-format stream-json --verbose --session-id <uuid>`
 
-`--setting-sources ""` means none of the user's own settings load. As observed on 2.1.316 to 2.1.319, the admitted host removes its Glob and Grep tools from a session that has a shell, and from every agent that session starts. It keeps them when the launch line names one of them. The line names both as allowed tools, which grants nothing the generated settings do not already allow and keeps the two search tools in the session and in its agents. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run. Before spawning, a refusal check judges the finished argument list. It refuses each of these:
+`--setting-sources ""` means none of the user's own settings load. A code comment records that the host removes its Glob and Grep tools from a session that has a shell and from the agents it starts, unless the launch line names them. No test checks this; [containment.md](containment.md#how-a-launch-is-assembled) lists the launch line's other terms. The line names both, which grants nothing the generated settings do not already allow. Everything the host may do comes from files AVARICE generates per invocation under the data root: settings, hook policy, agents, a plugin directory of symlinked skills, and an empty MCP server list. An onboarding keeps these files in a directory per onboarding and a run keeps them in a directory per run.
 
-- `--bare`, anything starting with `--dangerously`, `--allow-dangerously`, `--add-dir`, `--allowed-tools` and `--permission-prompt-tool`;
-- `--allowedTools` with any value other than `Glob,Grep`, in its `=` form, or a second time;
-- a prompt that is empty or starts with a dash;
-- any permission mode other than `dontAsk`, and a `--permission-prompts` value other than `none`;
-- a non-empty setting-sources value, a missing settings file and a missing `--strict-mcp-config`;
-- a budget that is not a positive finite number.
+Before spawning, a refusal check judges the finished argument list, and the host's environment is built from nothing. The refusals are listed in [containment.md](containment.md#refusals-before-launch) and the environment in [containment.md](containment.md#environment-scrubbing).
 
-The host's environment is built from nothing. It holds the safe-git variables, the GSD pass-through names (`HOME`, `LANG`, `TMPDIR`, `USER`, `LOGNAME`, `CLAUDE_CONFIG_DIR`, each only when set), a `PATH` of the gsd-core `bin` directory then `/usr/bin:/bin:/opt/homebrew/bin`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`, and `AVARICE_RUN`. For an onboarding `AVARICE_RUN` holds the onboarding ID; for a run it holds the run ID. A run that has a scratch directory also gets `TMPDIR` set to a `tmp` directory inside it, `npm_config_cache` set to an `npm-cache` directory inside it, and `npm_config_update_notifier=false`, so the notifier cannot reach for the network. AVARICE makes both directories before the launch. Proxy, token and loader variables never arrive.
-
-The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. The ID must be a UUID, and the adapter generates one otherwise.
+The session ID is chosen by the caller when it wants to record it before launch. A resume can then find a process that outlived its supervisor. A caller-supplied ID must be a UUID, or the adapter refuses it as invalid; the adapter generates a UUID only when the caller gives none.
 
 A paused item's session is continued with the host's resume flag. The line then ends `--resume <session-id>` in place of `--session-id <uuid>`; the host refuses both together, so one is never added beside the other, and every other flag stays as above. The host looks for a session only in the configuration directory of the process that launches it. A run therefore records the directory it started under, and every supervisor launches the host with it (see [runs.md](runs.md#the-detached-supervisor)). A session the host does not know ends as an error result with no turns, no cost and exit 1. The run reads that as a session that is gone and answers with a fresh unit.
 
@@ -119,36 +116,15 @@ The parser reads stdout as it arrives, line by line. It keeps only the `system/i
 
 ### Outcome classification
 
-The outcome kind comes from facts, never from model text. The first rule that applies decides:
-
-1. The staging HEAD moved: failed. This is also recorded as a containment finding by the caller. For a run, the HEAD checked is the run clone's.
-2. No result event, or the wall clock fired: inconclusive.
-3. Subtype `error_max_budget_usd`, terminal reason `budget_exhausted`, or a hook-recorded budget denial: budget exhausted.
-4. The result's error flag is not exactly false, the exit code is not zero, or the process ended by signal: failed.
-5. A structural pause signal was supplied: paused.
-6. Every expected file exists in staging: progressed.
-7. Any permission denial or hook denial: denied.
-8. Otherwise: no progress.
-
-A result with no boolean error flag is therefore never a success. The host adapter never supplies a pause signal, so the host never returns paused. Only the run's unit stage supplies one. It reads a waiting-JSON file, a verification status that asks for a human, or a final message that ends in a question followed by numbered choices. [runs.md](runs.md) owns that stage. A pause routes the item to a decision, and the run continues with the items the decision does not touch ([runs.md](runs.md#several-items)). A staging read above the size limit counts as the file being present. A run passes no expected files.
+The outcome kind comes from facts, never from model text, and the rules are in [containment.md](containment.md#running-the-host). A result with no boolean error flag is never a success. The host adapter never supplies a pause signal, so the host never returns paused; only the run's unit stage supplies one, and [runs.md](runs.md) owns that stage. A staging read above the size limit counts as the file being present, and a run passes no expected files.
 
 ### Time, kill and transcript
 
-The wall clock is enforced by AVARICE: at the limit the process group gets SIGTERM, then SIGKILL after a 10 second grace; a caller abort takes the same path. After the host exits, the group is swept once more with SIGKILL so background subagent shells die with it. AVARICE waits up to 2 seconds for the output pipe to close, then cuts it. stderr is drained and discarded. The transcript (stdout) is capped at 20 MiB with a truncation note, redacted for secrets, and stored as an artifact; a transcript that cannot be stored is an error, not a silent gap. A spawn failure returns unavailable.
+The wall clock, the kill sequence and the transcript cap are described in [containment.md](containment.md#running-the-host). After the host exits, AVARICE waits up to 2 seconds for the output pipe to close, then cuts it. A spawn failure returns unavailable.
 
 ### Admitted versions and readiness
 
-Five versions are admitted: 2.1.312, 2.1.316, 2.1.317, 2.1.318 and 2.1.319. The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. A version is meant to join the list only after the live containment suite has run against it with no containment failure; the code checks list membership only. No range is accepted: any version not on the list is refused until added.
-
-Before every launch the adapter proves each layer, and any refusal is a denial with rule `enforcement_failure:<reason>` with nothing spawned. These checks prevent a launch. None of them asks the running host which sandbox it applied.
-
-- The generated settings carry the required permission and sandbox keys (default mode `dontAsk`, bypass disabled, sandbox enabled and fail-if-unavailable, no unsandboxed commands, no auto-allowed sandboxed Bash, no excluded commands, empty network allowlist with strict allowlist). The check reads the generated file, not the host's effective settings.
-- The hook is configured for PreToolUse and ConfigChange with `onFailure: block`, for PostToolUse and PostToolUseFailure without that requirement, and every hook script is readable.
-- A self-test starts the hook the way the settings would, feeds it a write outside the write roots, and requires a deny verdict.
-- The sandbox probe applies a profile. It proves that `sandbox-exec` works on this machine.
-- The host version is admitted.
-
-Reasons seen by callers: `host-unavailable` (`--version` failed or timed out), `host-version-unreadable`, `host-version-not-admitted:<version>`, `sandbox-unavailable`, `hook-script-unreadable` and `hook-self-test`. Four groups of reasons follow. The settings group has `settings-missing`, `settings-invalid` and `settings-key:<path>`. The hook configuration group has `hook-missing`, `config-hook-missing`, `hook-not-blocking`, `post-hook-missing` and `post-failure-hook-missing`. The invocation files group has `invocation-files:<kind>`, and the launch arguments group has `launch-args:<rule>`.
+The version is read from `claude --version` (the output must begin with `x.y.z`; 10 second timeout) before each launch, not once per process. Which versions are admitted, the flag check on an unverified patch, and the checks that run before every launch with the reason of each refusal are in [containment.md](containment.md#refusals-before-launch). Those checks prevent a launch. None of them asks the running host which sandbox it applied.
 
 ### Hook, called by Claude Code
 
@@ -156,7 +132,13 @@ The generated settings register AVARICE's hook command as the Node binary that i
 
 ### Reaping by session ID
 
-On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--(session-id|resume) <uuid>"` (10 second timeout), which finds a fresh host and a resumed one alike, and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group; a leader's whole group gets SIGTERM, anything else is signalled alone. Survivors after the grace get SIGKILL; a process alive 5 seconds after that is an error. The session ID must be a UUID. Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains either flag followed by that exact UUID is terminated.
+On resume, for an onboarding and for a run alike, AVARICE ends any process still carrying the recorded session. It runs `/usr/bin/pgrep -f -- "--(session-id|resume) <uuid>"` (10 second timeout), which finds a fresh host and a resumed one alike, and treats exit 1 as none found. For each match other than itself and process 1 it asks `/bin/ps -o pgid=` whether the process leads its own group. How the matches are signalled is in [containment.md](containment.md#session-id). A process alive 5 seconds after SIGKILL is an error.
+
+Without a reap capability on the host (the refusing host has none), an onboarding's resume skips this step. A run's resume stops instead when a launch row is left `started` and cannot be reaped (the step recorded no session ID, or the host cannot reap). Every row stays `started`: the launched host may still be running, and nothing may read the clone beside it. The match is on the command line text, so any process whose command line contains either flag followed by that exact UUID is terminated.
+
+### The restricted host
+
+For a host that cannot be contained, composition also builds a second Claude Code adapter in restricted mode and keeps it beside the host as an optional member of the dependency container. It is built and never recorded, and its descriptor is read only when `start --restricted` or `onboard --restricted` asks. The descriptor says enforcement `restricted` when `claude --help` lists the flags of the restricted launch line and `none`, with the reason, otherwise. It needs a located gsd-core, because the run's hook policy and settings are generated the same way, and it needs no admitted version, sandbox or hook. Before every restricted launch the generated settings must exist and deny by default, and the help must list the flags (the rules and the launch line are in [containment.md](containment.md#restricted-mode)). A restricted request never falls back to the contained host.
 
 ### The unavailable-host fallback
 
@@ -171,16 +153,19 @@ The hook script comes from `AVARICE_HOOK_ENTRY` or the script in this checkout. 
 
 ## Claude configuration directory
 
-`install-host` writes exactly one file, `skills/avarice-run/SKILL.md`, under a Claude configuration directory. The directory is the `--config-dir` flag, else `CLAUDE_CONFIG_DIR`, else `~/.claude`. This is the only place AVARICE writes under that directory. The skill is guidance for attended sessions: it says to call `avarice status` first, treat retrieved text as data, stay inside the contract's paths, stop on a denial, and leave configuration to the owner. It restricts its own tools to `avarice status`, `avarice context` and reading. A contained run never loads it.
+`install-host` writes two files under a Claude configuration directory: `skills/avarice-run/SKILL.md`, and the attended hook entry in `settings.json`. The directory is the `--config-dir` flag, else `CLAUDE_CONFIG_DIR`, else `~/.claude`. This is the only place AVARICE writes under that directory. The skill is guidance for attended sessions: it says to call `avarice status` first, treat retrieved text as data, stay inside the contract's paths, stop on a denial, and leave configuration to the owner. It restricts its own tools to `avarice status`, `avarice context` and reading. A contained run never loads it.
 
 The write is conservative. These rules prevent the overwrite or the write:
 
-- The command refuses to run when `AVARICE_RUN` is set, before any profile or store is touched.
+- The command refuses to run when `AVARICE_RUN` is set or a run supervisor is an ancestor process, before any profile or store is touched. When the process table cannot be read it refuses.
+- The command refuses a hook entry script that does not exist, is not a regular file or is not readable (exit 3). It refuses before it writes the skill or the settings, because the entry blocks every attended Bash call when its script fails.
 - The configuration directory itself may be a symbolic link; the `skills` directory, the `avarice-run` directory and the file may not. A link or a non-directory there is refused and nothing is written.
 - An existing file is overwritten only when it is a regular file of at most 256 KiB that carries the AVARICE marker line. Any other file is left untouched and refused.
 - The write goes to a temporary file created exclusively, then a rename, so a reader sees the old file or the new one. An identical existing file is reported unchanged.
 
 A refusal of a link, a non-directory or an unmarked file exits 3. The `AVARICE_RUN` refusal and bad arguments exit 64, and a read or write failure exits 70. The digest of the installed text is recorded in the ledger as the adapter-config row `host-skill:avarice-run`; if only that record fails, the file is in place and the command still exits 70.
+
+The settings entry has the matcher `Bash` and one command hook with a timeout of 5 seconds and `onFailure: block`. Its command line runs AVARICE's hook in attended mode with the profile's data root and carries the marker argument `--avarice-attended-hook`, because settings JSON has no comment field to mark an entry as AVARICE's. The file is the owner's. Every other key and every other entry keeps its content, the file keeps its indentation and its mode, and a new file is created with mode 0600. Only an entry that carries the marker is ever replaced. It is written through a temporary file and a rename. The command refuses, writing nothing (exit 3), when the settings file is a symbolic link, is not a regular file, is over 1 MiB or is not valid JSON. It also refuses a file that is not a JSON object with the hook structure, meaning `hooks` must be an object and `hooks.PreToolUse` a list of objects. It refuses an entry that mixes the marker with another command. The skill stays installed. The entry's digest is recorded as the adapter-config row `host-hook:attended`. What the entry enforces is in [policy-and-approvals.md](policy-and-approvals.md#privileged-commands-in-the-hook).
 
 The host adapter also reads this directory: it links skills from it into the plugin directory and keeps GSD's secret read guard script as a hook. It never writes there.
 
@@ -223,6 +208,8 @@ Admission runs `node bin/gsd-tools.cjs runtime-identity --raw` (5 second timeout
 
 The agents directory is derived as the sibling `agents` directory of the located gsd-core directory, not located independently.
 
+The adapter declares what it drives as capabilities. `init-onboard`, `map-full`, `map-fast`, `stamp` and `verify-drift` are true. So are `map-paths` (GSD's `--paths` scope on the map workflow) and `adopt-map` (taking a committed, stamped map whose drift check passed, with no workflow run). `ingest-docs` is false because the adapter does not drive it. A mapping mode whose capability is false is refused before any host starts, with the reduced mode the step names (see [onboarding.md](onboarding.md#mapping)).
+
 ### Verbs driven
 
 Every other GSD call goes through the command executor, sandboxed with the network denied, as `node <gsd-core>/bin/gsd-tools.cjs <verb> ...`. The environment is rebuilt (safe-git variables, the pass-through names, gsd-core `bin` first on `PATH`). The default timeout is 15 seconds and the output limit 16 MiB. The data root and the credential locations (listed in [containment.md](containment.md#generated-settings-in-effect)) are denied for reading, and the staging directory is the working directory. A verb that writes may write only the staging `.planning` directory, or the single subdirectory it targets for the snapshot verbs. These verbs run during onboarding. A run's unit reaches GSD through the host and its shim, not through these verbs.
@@ -241,7 +228,7 @@ Every other GSD call goes through the command executor, sandboxed with the netwo
 
 Setting keys must be dotted identifiers and values plain tokens; query terms must be non-empty, at most 200 characters, free of control characters and not start with a dash. Output is JSON; output that starts with `@file:` is a spill, followed to the absolute path it names (up to 16 MiB). Several fields are validated (map readiness and the brownfield flag), and a result that fails the shape check is an invalid error. A disabled capability is a result, not an error, for intel and graph reads.
 
-Failure mapping: timeout or cancel is a timeout error with unknown side effects. A spawn error is unavailable, and so is exit code 69. Any other non-zero exit is internal, carrying the first line of stderr. An end by signal is internal, naming the signal. Truncated or non-JSON output is internal. The adapter publishes a capability list: init-onboard, map-full, map-fast, stamp and verify-drift are true; map-paths and ingest-docs are false; initializing planning is unsupported.
+Failure mapping: timeout or cancel is a timeout error with unknown side effects. A spawn error is unavailable, and so is exit code 69. Any other non-zero exit is internal, carrying the first line of stderr. An end by signal is internal, naming the signal. Truncated or non-JSON output is internal. Initializing planning is unsupported.
 
 Inside the contained host, GSD is reached through its own shim: every GSD workflow shell block begins with a long line defining `gsd_run`. Hook policy admits `gsd_run` read verbs only after a command whose first bytes hash to the fingerprint AVARICE took from that line. The line is read from the located gsd-core's `workflows/map-codebase.md` (first line starting `_GSD_SHIM_NAME=`, the file's size capped at 1 MiB). If the file or the line is missing, the host is not admitted. A GSD release that changes the line gets its own fingerprint automatically; one that moves or renames it is refused.
 
@@ -249,17 +236,9 @@ The read verbs the hook admits per purpose are listed in [containment.md](contai
 
 ## git
 
-AVARICE calls the `git` found on `PATH` for every operation, always through one wrapper, never a shell. No version is checked. The wrapper rejects anything but a subcommand as the first argument (so no `-c`, `-C`, `--git-dir`) and rejects `--config-env` anywhere. Its environment holds the caller's `PATH`, `HOME` and `LANG` (with defaults when `PATH` or `LANG` is empty) plus a fixed set that disables hooks (`core.hooksPath=/dev/null`), `core.fsmonitor`, system config, system attributes, optional locks and terminal prompts. On calls that compare or write working files, every `filter.<name>` clean, smudge and process command in the repository is blanked for that call, and `filter.<name>.required` is set to false. The default timeout is 10 seconds. Run source listings allow 60. Clone, checkout and fetch allow 120, and so do the run workspace tree operations and the hand-off fetch. A timeout, an unrunnable git (unavailable) and a non-zero exit (internal, with the first stderr line) are distinct errors.
+AVARICE calls the `git` found on `PATH` for every operation, always through one wrapper, never a shell. No version is checked. The wrapper's refusals, its environment and the filter blanking are in [containment.md](containment.md#git-safety). The default timeout is 10 seconds. Run source listings allow 60. Clone, checkout and fetch allow 120, and so do the run workspace tree operations and the hand-off fetch. A timeout, an unrunnable git (unavailable) and a non-zero exit (internal, with the first stderr line) are distinct errors.
 
-Three subcommands accept only listed options. Anything else is refused before git runs, which prevents a caller from re-enabling what the environment turns off.
-
-| Subcommand | Options admitted |
-|---|---|
-| `clone` | `--local`, `--no-hardlinks`, `--no-checkout`, `--quiet`, `-q` |
-| `fetch` | `--no-tags`, `--no-write-fetch-head`, `--quiet`, `-q`; a refspec with a leading `+` is refused anywhere |
-| `commit` | `--no-verify`, `--no-gpg-sign`, `--quiet`, `-q`, and `-m` with its message as the value |
-
-A caller can also ask for a fixed commit identity (name, email and signing off), fsck of transferred objects, a temporary index file (an absolute path only) and literal pathspecs. These map to fixed configuration keys and environment variables, never free-form ones. A `fetch` always runs with automatic gc and maintenance off, so it cannot start a repack or prune of the repository it writes to.
+Three subcommands accept only listed options, and a caller can ask for a fixed commit identity, fsck of transferred objects, a temporary index file and literal pathspecs. The refusals, the filter neutralization and the options admitted are in [containment.md](containment.md#git-safety).
 
 | Group | Commands |
 |---|---|
@@ -286,18 +265,13 @@ The run workspace is the git side of one run. Everything in it runs in the super
 - Unpark: puts the parked content, file modes and deletions back on the current HEAD in batches, with `restore --source=<park tree> --worktree`. It refuses with a conflict, naming the paths, when a parked path changed between the base HEAD and HEAD or is modified now. It refuses a path whose parent is a symbolic link, and a second call changes nothing. [runs.md](runs.md#several-items) says when a park happens.
 - Drop park: deletes only the park ref, with `update-ref -d`. A ref that is already gone is success, and the objects stay until git collects them.
 - Restore and remove: put named tracked files back to their content at HEAD, or delete named untracked files and the directories they leave empty. An untracked path given to restore, or a tracked path given to remove, is a conflict and nothing is changed.
-- Commit: the supervisor commits exactly the given clone-relative paths under the fixed identity `AVARICE <avarice@localhost.invalid>`, unsigned, with `--no-verify`. Trailers are appended after a blank line, and each must be a single `Key: value` line. An empty list, an absolute path, a `..` segment, a `.git` segment, a leading dash, an empty message or a message with a NUL is refused. A path is split into segments at a slash only, so a backslash is part of a file name and `a\b` is one name, not `a/b`. A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
+- Commit: the supervisor commits exactly the given clone-relative paths under a fixed identity, unsigned, with `--no-verify`. The paths, message and trailers it refuses are in [containment.md](containment.md#the-supervisors-commit-and-the-hand-off). A commit with no change in the paths is a conflict. The `Avarice-Run:` and `Avarice-Attempt:` trailers of the HEAD message can be read back together with the parents of the HEAD commit. Only a line of exactly that form counts as a trailer, so message text cannot pose as one.
 - Read: a clone file as UTF-8 under a size limit, refusing traversal, absolute paths and symbolic links that leave the clone.
+- Patch: the clone's tracked and untracked non-ignored content compared with HEAD as one binary-form patch, without renames, external diff drivers or text conversion. It writes nothing to the clone and leaves the clone's index alone. The caller names directories to leave out, which must be plain relative directory names, and files to leave out. A file may have any name git can hold: it is left out literally, so `*`, `?`, `[`, `:` and a leading `-` are ordinary characters. A file entry that is empty, absolute, holds a NUL or has a `..` segment is refused as invalid and no patch is built. Only the restricted run builds one.
 
 ### Fetch into the source repository
 
-The hand-off is the one write AVARICE makes to the user's repository. It fetches the run branch of the clone into the source as a new local branch of the same name, and it is create-only:
-
-- It resolves the branch in the clone and the source's top level, then checks the source for that ref. The same commit already there is success with nothing created; a different commit is a conflict and nothing is fetched.
-- The fetch is never forced, takes no tags, writes no fetch-head, and runs with fsck on, because the objects come from a tree an agent wrote into.
-- Afterwards the ref must exist at the commit; any other state is an internal error.
-
-It runs no checkout, reset or clean and changes neither the index nor the working tree of the user's checkout. It does write the objects the new branch needs into the source's object database. After a failure the ref may or may not exist, and a later hand-off finds it through the same check. Onboarding staging never writes to the user's repository.
+The hand-off is the one write AVARICE makes to the user's repository. It fetches the run branch of the clone into the source as a new local branch of the same name, and it is create-only. The rules of the fetch are in [containment.md](containment.md#the-supervisors-commit-and-the-hand-off). It runs no checkout, reset or clean and changes neither the index nor the working tree of the user's checkout. It does write the objects the new branch needs into the source's object database. After a failure the ref may or may not exist, and a later hand-off finds it through the same check. Onboarding staging never writes to the user's repository.
 
 ### Run source
 
@@ -314,7 +288,7 @@ Pin and HEAD must be commit ids of 40 lowercase hexadecimal digits that exist in
 
 `start`, `decide` and `resume` spawn the Node binary that is running the CLI, with its own execution arguments, the running CLI script, `supervise` and the run ID. The child is detached into its own process group. Its standard streams are ignored, its working directory is the data root and it is unreferenced. Closing the shell or killing `start --wait` therefore leaves it running. It runs the supervisor unconfined, as AVARICE itself.
 
-Its environment is the parent's whole environment plus the three profile roots the parent resolved (configuration, data and work), with the test-runner marker removed. `CLAUDE_CONFIG_DIR` is the host configuration directory the run recorded at start, when it recorded one ([runs.md](runs.md#the-detached-supervisor)). The environment is therefore not minimal like the host's. A relative or missing entry script refuses the spawn; the caller then exits 70 and the run stays stored. A spawn failure reported after the fact is swallowed. The only channel back is the ledger. The caller records the child's process ID in a step row. With `--wait` it polls the run's state, lease and that process until the run stops, the process is gone with the lease lapsed, or the wait budget runs out. The lifecycle is in [runs.md](runs.md).
+Its environment is the parent's whole environment plus the three profile roots the parent resolved (configuration, data and work) and the selected profile as `AVARICE_PROFILE`, with the test-runner marker removed. A supervisor has no repository to read a binding from, so the profile travels in the environment. `CLAUDE_CONFIG_DIR` is the host configuration directory the run recorded at start, when it recorded one ([runs.md](runs.md#the-detached-supervisor)). The environment is therefore not minimal like the host's. A relative or missing entry script refuses the spawn; the caller then exits 70 and the run stays stored. A spawn failure reported after the fact is swallowed. The only channel back is the ledger. The caller records the child's process ID in a step row. With `--wait` it polls the run's state, lease and that process until the run stops, the process is gone with the lease lapsed, or the wait budget runs out. The lifecycle is in [runs.md](runs.md).
 
 ## graphify
 
@@ -331,15 +305,7 @@ Commands run through the sandboxed executor with network denied and one writable
 
 ## macOS sandbox
 
-The command executor wraps every command as `/usr/bin/sandbox-exec -p <profile> <argv>` with the given environment only, in its own process group. The profile starts from allow-default and denies network and all writes. It then applies these rules in order, and later rules win:
-
-1. For each loopback port the command was given, allow outbound connections to `localhost:<port>`. This is the only network a command can have, because Seatbelt cannot filter by host name.
-2. Re-allow writes for the system temp areas, `/dev/null`, `/dev/dtracehelper` and tty devices.
-3. Deny writes under the command's working directory.
-4. Re-allow writes under each declared write path.
-5. Deny reads of the named paths.
-6. Re-allow reads of each re-allowed path, which wins over the denials.
-7. Give back the metadata of each directory above a re-allowed path that lies inside a denied one, without its contents or a listing. A program can then resolve the real path of a file below it.
+The command executor wraps every command as `/usr/bin/sandbox-exec -p <profile> <argv>` with the given environment only, in its own process group. The profile starts from allow-default and denies network and all writes. The rules it applies, in order, are in [containment.md](containment.md#the-sandboxed-executor).
 
 Paths are resolved to real locations first, and a path with a quote, backslash, newline or NUL is refused rather than escaped.
 
@@ -386,7 +352,7 @@ AVARICE never spawns the GitHub CLI. The name `gh` appears in three places. It i
 
 ## Node.js and node:sqlite
 
-The package declares Node 22.22.3 or newer. There is no explicit Node version comparison at runtime; the gate is on the SQLite that Node bundles. Every ledger open first reads the bundled SQLite version and refuses unless it contains the WAL-reset fix. The accepted versions are 3.44.6 or later on the 3.44 line, 3.50.7 or later on 3.50, 3.51.3 or later on 3.51, any later line, and nothing on 3.45 to 3.49 (those never received the fix). An unreadable version string is refused. The refusal is an unsupported error telling the user to install Node 22.22.3 or newer.
+The package declares Node 22.22.3 or newer. Opening the ledger makes no Node version comparison; its gate is on the SQLite that Node bundles, which must contain the WAL-reset fix. The accepted SQLite versions are listed under the runtime gate in [data-model.md](data-model.md#the-ledger-file). The refusal is an unsupported error telling the user to install Node 22.22.3 or newer. `doctor` is the one place that compares the Node version with the package's engines rule. It judges only a rule of the form `>=x.y.z`; a rule of any other form, or a Node version string that does not parse, passes without a finding.
 
 `node:sqlite` is experimental in Node. The CLI entry point and the generated hook command both disable the experimental warning so it does not reach stderr. GSD verbs, the hook, the hook self-test and the supervisor run under the same Node binary that runs AVARICE.
 
@@ -397,7 +363,9 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | Condition | Result |
 |---|---|
 | No admitted gsd-core | no GSD adapter, no context sources, contained host replaced by the refusing host; onboarding stops incompatible |
-| `claude` missing or version not admitted | refusing host; the onboarding is blocked with reason `enforcement_failure` at the workspace stage's enforcement check |
+| `claude` missing or version not admitted | refusing host; the onboarding is blocked with reason `enforcement_failure` at the workspace stage's enforcement check, and the message says to rerun with `--restricted` |
+| A restricted request on a host whose help lacks a restricted flag | `start --restricted` is refused (exit 3) and a restricted onboarding is blocked with reason `enforcement_failure`; nothing falls back to the contained host |
+| A `keychain:` reference with no item, or a `cmd:` helper that fails or whose standard output is cut at the 16 KiB cap | the reference does not resolve; the `credential.resolve` event records the outcome, never the value |
 | Sandbox cannot apply a profile | executor unavailable; every GSD, graphify, install, check and host launch is refused |
 | Host exceeds wall clock | process group terminated; outcome is inconclusive |
 | Host moves the clone's HEAD | outcome failed, with a containment finding |
@@ -409,23 +377,28 @@ The ledger additionally refuses a store file (or its `-wal` and `-shm` siblings)
 | Egress proxy cannot start | the install fails with `enforcement_failure`; a check validation runs with no network instead |
 | Run branch already in the source at another commit | the hand-off is a conflict and nothing is fetched |
 | Supervisor cannot be spawned | the command exits 70; the run stays stored |
-| `install-host` meets a link or an unmarked file | refused (exit 3), nothing written |
-| `install-host` runs inside a run or with bad arguments | refused (exit 64), nothing written |
+| `install-host` meets a link, an unmarked skill or an unusable settings file | refused (exit 3); a refused settings file leaves the skill installed |
+| `install-host` runs inside a run (marker or process tree) or with bad arguments | refused (exit 64), nothing written |
+| `install-host` finds the hook entry script missing, not a regular file or unreadable | refused (exit 3), nothing written |
 | A banner cannot be delivered (`osascript` missing, killed at 10 seconds or failing) | the row ends `failed` with its code and `digest` exits 70 (see [autonomy-and-decisions.md](autonomy-and-decisions.md#notification)); no decision changes and no run changes |
 | `schedule install` cannot load the agent (`plutil` rejects the file or `launchctl bootstrap` fails) | exit 70 with the tool's first error line; a new file is removed again, and a replaced one stays in place unloaded |
 | A scheduled digest fails under launchd | the error is in `logs/digest.log` in the data root; nothing else records it |
 | An owner command cannot read the process chain with `ps` | the command refuses as if it were inside a run (exit 64) |
+| `ps` is missing, fails or prints an unreadable time when a writer judges the profile bindings lock | the lock of a live holder counts as stale only when its file is older than 60 seconds; nothing refuses |
 
 ## Quirks
 
 - The executor descriptor reports offline, although a supervisor step can be given one loopback port. The flag describes the adapter, not a particular command.
-- The three run ports (run source, run workspace, egress proxy) are built on every composition, read-only ones included. Only the executor, graph, GSD and host descriptors are recorded, so the run ports leave no record of which adapter a profile ran with.
+- The three run ports (run source, run workspace, egress proxy) are built on every composition, read-only ones included, and their descriptors are recorded by every command that is not read-only. A read-only command records none.
+- The `delegated:` provider checks only that the named CLI is an executable on `PATH` and hands back a handle that holds no value. The one place AVARICE runs the CLI is `doctor --online`, with `auth status`.
+- A context source that declares `paged` is asked page by page up to the page cap. No local source declares it.
 - The registry allowlist can only name port 443. A registry on another port works only through the test entry point's override.
 - A registry that is reachable only on a private network is unsupported (see [containment.md](containment.md#limits-of-containment)). In the tests, the proxy reaches the local registry only through a test-only resolver that skips the address check; production never passes it.
 - A refused proxy attempt fails the install even when the install command exited 0 and finished its work.
 - The supervisor inherits the user's whole environment, unlike the host and every sandboxed command, except that `CLAUDE_CONFIG_DIR` is the directory the run recorded at start.
 - The hand-off writes objects as well as one ref into the user's repository. A failed fetch can leave unreferenced objects there.
 - The conventions walk examines the newest 500 first-parent commits above the pin. A conventions-only commit older than that is not found, and the pin's own file is used.
+- The attended hook entry has a 5-second timeout and blocks on failure, so a slow hook blocks the owner's own shell call.
 - The installed skill tells the model not to run `avarice contract amend`, `avarice budget` or `avarice install-host`. `contract amend` and `install-host` are commands of this CLI; `avarice budget` is not.
 - The supervisor's own install and check commands set `HOME` and `TMPDIR` to the scratch directory itself, while the host's `TMPDIR` is a subdirectory of it.
 - Reaping matches any process whose command line contains `--session-id` or `--resume` followed by the exact UUID, not only processes AVARICE started.

@@ -9,12 +9,23 @@
 // the budget inside the same BEGIN IMMEDIATE transaction that appends the `hook.decision` event, so a call is
 // never charged without a row and never allowed without a charge. A deny is printed as the PreToolUse deny JSON
 // with exit 0. Events carry the tool name, rule, IDs and a staging-relative target, never a tool payload (T-01-35).
-import { existsSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
+// A shell call that is a privileged form (a push, a pull request, a release, a package publish; src/domain/privileged-commands.ts) is refused in a run with the
+// rule `privileged:<action>` and an approval request, recorded as `policy.denied` and `approval.requested` in the same transaction (plan 04-19). With
+// `--attended --data-root <dir>` the same entry serves the owner's own host session: it enforces privileged-action approvals only (see "Attended mode").
+import { randomBytes } from 'node:crypto';
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
+import { paramsDigest, paramsSummary, unshowableReason } from '../domain/approval.ts';
 import { sha256Hex } from '../domain/digest.ts';
-import { INEFFECTIVE_SEARCH_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
-import type { HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
+import { newId } from '../domain/ids.ts';
+import { RETRIEVAL_CAPS } from '../domain/retrieval-rules.ts';
+import { BROAD_DISCOVERY_SPENT_RULE, FULL_READ_BYTES_SPENT_RULE, FULL_READS_SPENT_RULE, INEFFECTIVE_SEARCH_RULE, PRIVILEGED_RULE_PREFIX, SEARCHES_SPENT_RULE, SUBAGENT_CONCURRENT_RULE, decideReadBeforeEdit, decideToolCall, loopLimitOf, normalizeToolCall, parseHookPolicy } from '../domain/hook-decision.ts';
+import type { BudgetName, HookDecision, HookPolicy, LoopStop, NormalizedToolCall } from '../domain/hook-decision.ts';
+import { UNAPPROVABLE_RULE, UNPARSEABLE_RULE, classifyLine, privilegedLineReason, privilegedReason } from '../domain/privileged-commands.ts';
+import type { PrivilegedCommand } from '../domain/privileged-commands.ts';
+import { consumeApprovalRow, pendingRequestId } from '../adapters/sqlite/approval-rows.ts';
+import { processRedactor } from '../adapters/redaction/process-redactor.ts';
 import { appendEventRow } from '../adapters/sqlite/events.ts';
 import { canonicalAbsolute } from '../adapters/fs/canonical-path.ts';
 
@@ -26,6 +37,17 @@ const BUSY_TIMEOUT_MS = 4000;
 const MAX_DIGEST_BYTES = 8 * 1024 * 1024;
 // How many of an invocation's latest decisions the search count looks through (the tool-call budget keeps an invocation far below it).
 const MAX_SEARCH_SCAN = 2000;
+// How many lines the host Read tool returns when the call names no limit (WR-11: the hook charges those lines).
+const HOST_READ_DEFAULT_LINES = 2000;
+// The most bytes the hook scans to measure one Read. A range it cannot measure by then (an offset far into a large file) is refused, so a Read cannot stall the hook (T-04-144).
+const MAX_READ_SCAN_BYTES = 64 * 1024 * 1024;
+
+// The key a file is recorded under in `hook_reads`, for the read-before-edit rule (SEC-3). The path is a lookup key, written and read here with the same function, so a
+// path that holds a secret-shaped string is stored with the redaction marker and a short digest of the whole path (two such files stay two keys) and never as typed.
+function readKey(path: string): string {
+  const redacted = processRedactor.redact(path);
+  return redacted === path ? path : `${redacted}#${sha256Hex(path).slice(0, 16)}`;
+}
 
 function fail(reason: string): never {
   try {
@@ -61,11 +83,22 @@ function readStdin(): string {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function parseArgs(argv: readonly string[]): { event?: string; policy?: string } {
-  const out: { event?: string; policy?: string } = {};
+interface HookArgs {
+  event?: string;
+  policy?: string;
+  // Plan 04-19: attended mode (the owner's own session) names the profile's data root instead of a run policy file.
+  attended: boolean;
+  dataRoot?: string;
+}
+
+// `--avarice-attended-hook` is the marker `avarice install-host` finds its own settings entry by; it carries no meaning here.
+function parseArgs(argv: readonly string[]): HookArgs {
+  const out: HookArgs = { attended: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--event' && argv[i + 1] !== undefined) out.event = argv[(i += 1)] as string;
     else if (argv[i] === '--policy' && argv[i + 1] !== undefined) out.policy = argv[(i += 1)] as string;
+    else if (argv[i] === '--data-root' && argv[i + 1] !== undefined) out.dataRoot = argv[(i += 1)] as string;
+    else if (argv[i] === '--attended') out.attended = true;
   }
   return out;
 }
@@ -191,6 +224,58 @@ function fileState(path: string): FileState {
   return { exists: true, digest: 'sha256:' + sha256Hex(readFileSync(path)) };
 }
 
+// The bytes a Read can return, which is what it is charged (WR-11): the bytes of the lines it asks for, from `offset` (default the first line) for `limit` lines (default
+// HOST_READ_DEFAULT_LINES), the newline of each included, counted with a chunked read of the canonical path and never more than the file holds. The scan stops at the end of
+// the range or of the file, or as soon as the count passes the byte cap (no row can hold more, because nothing raises a cap): that count is the cap plus one, which no row has room
+// for. A range not resolved after MAX_READ_SCAN_BYTES is charged the same. A path that cannot be resolved, is missing or is not a regular file is charged 0 bytes; any other
+// error propagates and the caller exits 2.
+function measureRead(call: Extract<NormalizedToolCall, { kind: 'file-read' }>): number {
+  const canonical = canonicalAbsolute(call.paths[0] as string);
+  if (canonical === null) return 0;
+  let stat;
+  try {
+    stat = statSync(canonical);
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 0;
+    throw e;
+  }
+  if (!stat.isFile() || stat.size === 0) return 0;
+  const cap = RETRIEVAL_CAPS.fullReadBytes;
+  const first = call.offset ?? 1;
+  const last = first + (call.limit ?? HOST_READ_DEFAULT_LINES) - 1;
+  const fd = openSync(canonical, 'r');
+  try {
+    const chunk = Buffer.allocUnsafe(65_536);
+    let line = 1;
+    let counted = 0;
+    let scanned = 0;
+    for (;;) {
+      const n = readSync(fd, chunk, 0, chunk.length, null);
+      if (n === 0) return counted;
+      scanned += n;
+      const read = chunk.subarray(0, n);
+      let at = 0;
+      while (at < n) {
+        const newline = read.indexOf(10, at);
+        const end = newline === -1 ? n : newline + 1;
+        if (line >= first) {
+          counted += end - at;
+          if (counted > cap) return cap + 1;
+        }
+        at = end;
+        if (newline !== -1) {
+          line += 1;
+          if (line > last) return counted;
+        }
+      }
+      if (scanned >= MAX_READ_SCAN_BYTES) return cap + 1;
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
 const isUnder = (path: string, root: string): boolean => path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`);
 
 const agentOf = (input: Record<string, unknown>): string => {
@@ -236,6 +321,100 @@ function stopReasonOf(stop: LoopStop): string {
     : `AVARICE: ${stop.count} consecutive searches without a read; the run is stopped for escalation`;
 }
 
+// A privileged form refused for want of an approval (plan 04-19; FR-12, S-7): the request that is still waiting for this scope, action and parameters is named
+// again, else a new `apr_` request is recorded, and the denial itself is recorded as `policy.denied`. The caller's BEGIN IMMEDIATE transaction is open, so the
+// request, the denial and the decision they belong to commit together. The events carry the action, the digest and a summary of the parameters that shows every bound
+// value whole, the working directory included (callers refuse a command whose values cannot be shown whole before they get here; src/domain/approval.ts
+// unshowableReason), never the command line. `scope` is the run ID of a run, or `attended:<session id>`, which has no run ID (src/domain/approval.ts scopeRunId).
+interface PrivilegedDenial {
+  scope: string;
+  runId?: string;
+  invocationId?: string;
+  tool: string;
+  privileged: PrivilegedCommand;
+  nowMs: number;
+}
+
+function recordPrivilegedDenial(db: DatabaseSync, o: PrivilegedDenial): string {
+  const { action, params } = o.privileged;
+  const digest = paramsDigest(params);
+  const summary = paramsSummary(params);
+  const ruleId = `${PRIVILEGED_RULE_PREFIX}${action}`;
+  let requestId = pendingRequestId(db, { runId: o.runId, scope: o.scope, action, paramsDigest: digest });
+  if (requestId === undefined) {
+    requestId = newId('apr_', o.nowMs, randomBytes(10));
+    appendEventRow(db, {
+      type: 'approval.requested',
+      ...(o.runId !== undefined ? { runId: o.runId } : {}),
+      data: { requestId, scope: o.scope, action, paramsDigest: digest, paramsSummary: summary, ruleId },
+      nowMs: o.nowMs,
+    });
+  }
+  appendEventRow(db, {
+    type: 'policy.denied',
+    level: 'warn',
+    ...(o.runId !== undefined ? { runId: o.runId } : {}),
+    ...(o.invocationId !== undefined ? { invocationId: o.invocationId } : {}),
+    data: { ruleId, action, scope: o.scope, ...(o.runId !== undefined ? { runId: o.runId } : {}), requestId, tool: short(o.tool), paramsDigest: digest, target: summary, source: 'hook' },
+    nowMs: o.nowMs,
+  });
+  return requestId;
+}
+
+// The denial of a privileged form in a run whose bound values cannot be shown to the owner whole (plan 04-56; G-04-1, GCR-01): no request is written, because there is nothing the
+// owner could approve knowingly. One `policy.denied` is recorded with the run's rule name (run-mode rule names do not change), the action, the digest of the parameters and the reason,
+// which names a key and a length and never a value, and no summary, request or command text. The caller's BEGIN IMMEDIATE transaction is open.
+interface UnshowableDenial {
+  runId: string;
+  invocationId: string;
+  tool: string;
+  privileged: PrivilegedCommand;
+  ruleId: string;
+  reason: string;
+  nowMs: number;
+}
+
+function recordUnshowableDenial(db: DatabaseSync, o: UnshowableDenial): void {
+  appendEventRow(db, {
+    type: 'policy.denied',
+    level: 'warn',
+    runId: o.runId,
+    invocationId: o.invocationId,
+    data: { ruleId: o.ruleId, action: o.privileged.action, scope: o.runId, runId: o.runId, tool: short(o.tool), paramsDigest: paramsDigest(o.privileged.params), reason: short(o.reason), source: 'hook' },
+    nowMs: o.nowMs,
+  });
+}
+
+// Charges the named budget rows of the run, all or none (plan 04-29; CON-11): one unit each, or the amount given for the row (WR-11: a Read charges its bytes to retrieval.fullReadBytes). The caller's BEGIN IMMEDIATE transaction is open and holds the ledger's
+// write lock, so checking every row and then writing every row cannot interleave with another hook process: a search is never charged `toolCalls` and refused for
+// want of a `retrieval.searches` unit, and a unit is never charged without the event row that records it. Returns the first row with no room (the rows are checked in
+// the order given, every one before any is charged), or null when all were charged. No row at all is a broken ledger (fail closed); a row at its limit is the budget doing
+// its job.
+type Amounts = Partial<Record<BudgetName, number>>;
+function chargeRows(db: DatabaseSync, runId: string, names: readonly BudgetName[], amounts: Amounts = {}): BudgetName | null {
+  const room = db.prepare('SELECT used + reserved + ? <= limit_value AS room FROM budgets WHERE run_id = ? AND name = ?');
+  for (const name of names) {
+    const row = room.get(amounts[name] ?? 1, runId, name) as { room: number } | undefined;
+    if (row === undefined) throw new Error(`the ledger has no ${name} budget for run ${runId}`);
+    if (Number(row.room) !== 1) return name;
+  }
+  const charge = db.prepare('UPDATE budgets SET used = used + ? WHERE run_id = ? AND name = ? AND used + reserved + ? <= limit_value');
+  for (const name of names) {
+    const amount = amounts[name] ?? 1;
+    if (Number(charge.run(amount, runId, name, amount).changes) === 0) throw new Error(`the ${name} budget of run ${runId} changed while it was locked`);
+  }
+  return null;
+}
+
+// The denial for a budget row that had no room: the original `budget_exhausted` for the tool-call and subagent rows, the retrieval rules for the retrieval rows.
+function spentDecision(name: BudgetName): HookDecision {
+  if (name === 'retrieval.searches') return { decision: 'deny', rule: SEARCHES_SPENT_RULE, budget: name, reason: 'the run has made all the searches its contract allows; read what was found or report what is missing' };
+  if (name === 'retrieval.broadDiscovery') return { decision: 'deny', rule: BROAD_DISCOVERY_SPENT_RULE, budget: name, reason: 'the one whole-repository search the contract allows was made; search a directory or add a filter' };
+  if (name === 'retrieval.fullReads') return { decision: 'deny', rule: FULL_READS_SPENT_RULE, budget: name, reason: 'the run has read all the whole files its contract allows; work from what was read or report what is missing' };
+  if (name === 'retrieval.fullReadBytes') return { decision: 'deny', rule: FULL_READ_BYTES_SPENT_RULE, budget: name, reason: 'this read would pass the bytes of whole-file reads the contract allows; read fewer lines with offset and limit, or report what is missing' };
+  return { decision: 'deny', rule: 'budget_exhausted', budget: name };
+}
+
 function emit(json: unknown): void {
   writeSync(1, JSON.stringify(json) + '\n');
 }
@@ -260,6 +439,10 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
     edit = { canonical, state: fileState(canonical), display: rel.length > MAX_TARGET_CHARS ? rel.slice(0, MAX_TARGET_CHARS) : rel };
   }
 
+  // WR-11: the bytes an allowed Read of a run with retrieval limits can return, measured before the ledger is opened (any error but a path that is not a file exits 2).
+  let readBytes = 0;
+  if (policy.retrieval !== undefined && decided.decision === 'allow' && normalized.call.kind === 'file-read') readBytes = measureRead(normalized.call);
+
   const limits = policy.loopLimits;
   const db = openLedger(policy.ledgerPath);
   let final: HookDecision;
@@ -268,8 +451,21 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
   try {
     final = inTransaction(db, () => {
       let result = decided;
+      // FR-12: a privileged shell form is refused here whatever the run's command set holds. An approval is never consumed in a run (it never widens the
+      // run's commands), so the denial names the request the owner approves and the run goes on without the effect.
+      // A command whose bound values cannot be shown to the owner whole is refused with the same rule and no request (G-04-1, GCR-01): the owner would be approving less than the digest binds.
+      if (result.decision === 'deny' && result.privileged !== undefined) {
+        const unshowable = unshowableReason(result.privileged.params);
+        if (unshowable !== undefined) {
+          recordUnshowableDenial(db, { runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, ruleId: result.rule, reason: unshowable, nowMs: Date.now() });
+          result = { decision: 'deny', rule: result.rule, reason: `${result.privileged.action} cannot be approved, so no approval was asked for: ${unshowable}` };
+        } else {
+          const requestId = recordPrivilegedDenial(db, { scope: policy.runId, runId: policy.runId, invocationId: policy.invocationId, tool, privileged: result.privileged, nowMs: Date.now() });
+          result = { decision: 'deny', rule: result.rule, reason: privilegedReason(result.privileged.action, requestId) };
+        }
+      }
       if (edit !== undefined) {
-        const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), edit.canonical) as { digest: string } | undefined;
+        const recorded = db.prepare('SELECT digest FROM hook_reads WHERE invocation_id = ? AND agent_id = ? AND path = ?').get(policy.invocationId, agentOf(input), readKey(edit.canonical)) as { digest: string } | undefined;
         const objection = decideReadBeforeEdit({ tool, exists: edit.state.exists, recorded: recorded?.digest, current: edit.state.digest, displayPath: edit.display });
         if (objection !== null) result = objection;
       }
@@ -287,16 +483,8 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       if (result.decision === 'allow' && result.budget === 'subagentsTotal' && inFlightSubagents(db, policy.invocationId) >= policy.subagentsConcurrent && totalHasRoom()) {
         result = { decision: 'deny', rule: SUBAGENT_CONCURRENT_RULE };
       } else if (result.decision === 'allow' && result.budget !== undefined) {
-        const charged = db
-          .prepare('UPDATE budgets SET used = used + 1 WHERE run_id = ? AND name = ? AND used + reserved + 1 <= limit_value')
-          .run(policy.runId, result.budget);
-        if (Number(charged.changes) === 0) {
-          // No row at all is a broken ledger (fail closed); a row at its limit is the budget doing its job.
-          if (db.prepare('SELECT 1 AS found FROM budgets WHERE run_id = ? AND name = ?').get(policy.runId, result.budget) === undefined) {
-            throw new Error(`the ledger has no ${result.budget} budget for run ${policy.runId}`);
-          }
-          result = { decision: 'deny', rule: 'budget_exhausted', budget: result.budget };
-        }
+        const refused = chargeRows(db, policy.runId, [result.budget, ...(result.alsoCharges ?? [])], { 'retrieval.fullReadBytes': readBytes });
+        if (refused !== null) result = spentDecision(refused);
       }
       // CON-14: this denial is the Nth in a row when N-1 denials directly precede it in the invocation's decision events (by seq). The count
       // is an integer read from ledger rows in this transaction, so two hook processes cannot both miss the limit.
@@ -308,7 +496,7 @@ function preToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
         level: result.decision === 'deny' ? 'warn' : 'info',
         runId: policy.runId,
         invocationId: policy.invocationId,
-        data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}) },
+        data: { ...identity(policy, tool, input['agent_id']), ...subagentIdentity(normalized.call, toolInput, input), decision: result.decision, rule: result.rule, ...(result.budget !== undefined ? { budget: result.budget } : {}), ...(result.decision === 'allow' && result.alsoCharges !== undefined ? { alsoCharged: result.alsoCharges } : {}) },
         nowMs: Date.now(),
       });
       if (limits !== undefined && loop.stop !== null) {
@@ -393,7 +581,7 @@ function postToolUse(policy: HookPolicy, input: Record<string, unknown>): void {
       if (record !== undefined) {
         db.prepare(
           'INSERT INTO hook_reads (invocation_id, agent_id, path, digest, seq, recorded_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (invocation_id, agent_id, path) DO UPDATE SET digest = excluded.digest, seq = excluded.seq, recorded_at = excluded.recorded_at',
-        ).run(policy.invocationId, agentOf(input), record.path, record.digest, receipt.seq, new Date(now).toISOString());
+        ).run(policy.invocationId, agentOf(input), readKey(record.path), record.digest, receipt.seq, new Date(now).toISOString());
       }
     });
   } finally {
@@ -435,8 +623,170 @@ function configChange(policyPath: string | undefined): never {
   return fail('configuration changes are not allowed during a contained invocation');
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Attended mode (plan 04-19; FR-12, S-4, T-04-50): the owner's own host session, the same entry installed by `avarice install-host` in the settings.json beside
+// the skill. It enforces privileged-action approvals only. A Bash call that is not a privileged form (and every other tool) is allowed without a decision,
+// without opening the store and without an event. Each privileged command of a line consumes one approval of the scope `attended:<session id>`, the action and the digest
+// of its parameters in the same transaction that records the action's start (all of the line's commands or none), or the line is denied with a request for each
+// command that has no approval, which the owner approves with `avarice approve`. A request shows every value the approval binds, the working directory included, whole. A line
+// holding a command that cannot be approved (a gh api body from a file or standard input, or a command whose bound values cannot be shown whole: a key or value over 80 characters, the
+// entries over 400 together, a working directory over 512, a control character or a secret-shaped text) is denied with `privileged:unapprovable` before anything is consumed. Any error exits 2. It prints no allow: with nothing printed the host's own permission rules still apply, so an approval never widens what the host asks.
+// ---------------------------------------------------------------------------------------------------------
+
+// The host's session ID as a plain token: it becomes part of an approval scope.
+const SESSION_ID = /^[A-Za-z0-9_.-]{1,100}$/;
+
+// A line the classifier could not read (a limit passed, an unterminated quote or substitution): refused, never passed silently (plan 04-40; CR-01, FR-12). The denial is
+// recorded as `policy.denied` with the rule `privileged:unparseable` and the scope, and holds no command text. It needs no approval: nothing is named that the owner could approve.
+function denyUnparseable(dataRoot: string, scope: string, tool: string, reason: string): void {
+  const db = openLedger(join(dataRoot, 'state.db'));
+  try {
+    inTransaction(db, () => {
+      appendEventRow(db, {
+        type: 'policy.denied',
+        level: 'warn',
+        data: { ruleId: UNPARSEABLE_RULE, scope, tool: short(tool), reason: short(reason), source: 'hook' },
+        nowMs: Date.now(),
+      });
+    });
+  } finally {
+    db.close();
+  }
+  emit({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `avarice: ${UNPARSEABLE_RULE}: the command could not be checked for privileged actions (${reason}); split it into shorter commands, or write files with the Write tool`,
+    },
+  });
+}
+
+// A command no approval can cover (plan 04-51; WR-04, T-04-138): a gh api request whose body is a file or standard input, which the line digest cannot bind, or (plan 04-56; G-04-1,
+// GCR-01) one whose bound values cannot be shown to the owner whole. The line is denied before any approval is consumed and no request is made, because there is nothing the owner
+// could approve knowingly; one `policy.denied` is recorded for each such command, with no command text.
+function denyUnapprovable(dataRoot: string, scope: string, tool: string, blocked: readonly PrivilegedCommand[]): void {
+  const db = openLedger(join(dataRoot, 'state.db'));
+  try {
+    inTransaction(db, () => {
+      for (const command of blocked) {
+        appendEventRow(db, {
+          type: 'policy.denied',
+          level: 'warn',
+          data: { ruleId: UNAPPROVABLE_RULE, action: command.action, scope, tool: short(tool), reason: short(command.unapprovable ?? ''), source: 'hook' },
+          nowMs: Date.now(),
+        });
+      }
+    });
+  } finally {
+    db.close();
+  }
+  emit({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: `avarice: ${UNAPPROVABLE_RULE}: ${blocked[0]?.unapprovable ?? 'the command cannot be approved'}`,
+    },
+  });
+}
+
+// The canonical path of the directory the hook input says the call runs in. A call that needs a decision (privileged, or one that could not be read) without an absolute,
+// existing directory is refused with exit 2: what an approval was granted for cannot be checked against a directory that is not known (CR-03, FR-12).
+function attendedCwd(input: Record<string, unknown>): string {
+  const given = input['cwd'];
+  const canonical = typeof given === 'string' ? canonicalAbsolute(given) : null;
+  if (canonical === null) return fail('a privileged call needs the hook input cwd as an absolute path');
+  let directory = false;
+  try {
+    directory = statSync(canonical).isDirectory();
+  } catch {
+    directory = false;
+  }
+  if (!directory) return fail('a privileged call needs the hook input cwd to be an existing directory');
+  return canonical;
+}
+
+function attendedPreToolUse(dataRoot: string, input: Record<string, unknown>): void {
+  const tool = input['tool_name'];
+  if (typeof tool !== 'string' || tool === '') fail('the hook input has no tool_name');
+  if (tool !== 'Bash') return;
+  const toolInput = input['tool_input'];
+  const command = typeof toolInput === 'object' && toolInput !== null && !Array.isArray(toolInput) ? (toolInput as Record<string, unknown>)['command'] : undefined;
+  if (typeof command !== 'string') fail('the Bash input has no command');
+  const classified = classifyLine(command);
+  if (classified.kind === 'none') return;
+  const session = input['session_id'];
+  if (typeof session !== 'string' || !SESSION_ID.test(session)) fail('a privileged call needs the host session_id as a plain token');
+  const scope = `attended:${session}`;
+  const cwd = attendedCwd(input);
+  if (classified.kind === 'unparseable') return denyUnparseable(dataRoot, scope, tool, classified.reason);
+  // The directory the owner's command runs in is part of what an approval binds (CR-03): `cd` is no word of the command, so a push approved in one repository is not one in another.
+  // A command is also unapprovable when the owner could not be shown every value it binds, the directory included (G-04-1, GCR-01): it is refused before anything is consumed or requested.
+  const bound: PrivilegedCommand[] = classified.commands.map((command) => {
+    const params = { ...command.params, cwd };
+    const unapprovable = command.unapprovable ?? unshowableReason(params);
+    return { action: command.action, params, ...(unapprovable !== undefined ? { unapprovable } : {}) };
+  });
+  const blocked = bound.filter((command) => command.unapprovable !== undefined);
+  if (blocked.length > 0) return denyUnapprovable(dataRoot, scope, tool, blocked);
+  const db = openLedger(join(dataRoot, 'state.db'));
+  let unapproved: { action: string; requestId: string }[];
+  try {
+    unapproved = inTransaction(db, () => consumeLine(db, scope, tool, bound, Date.now()));
+  } finally {
+    db.close();
+  }
+  const first = unapproved[0];
+  if (first !== undefined) {
+    emit({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: `avarice: ${PRIVILEGED_RULE_PREFIX}${first.action}: ${privilegedLineReason(unapproved)}`,
+      },
+    });
+  }
+}
+
+// One usable approval for each privileged command of a line, taken all or none (plan 04-48; CR-04, FR-12, FR-13, T-04-130): one owner decision authorizes one
+// action. The caller's BEGIN IMMEDIATE transaction is open; the approvals are consumed in line order under a savepoint, each taking the oldest usable approval of its
+// scope, action and digest, so a command named twice takes two. If any command has none, the savepoint is rolled back, so no approval is spent and no
+// `action.started` event stays, and every command that lacked one is denied with a request (an already waiting request is named again). Returns the denied
+// commands' request IDs in line order, empty when the line may run.
+function consumeLine(db: DatabaseSync, scope: string, tool: string, commands: readonly PrivilegedCommand[], nowMs: number): { action: string; requestId: string }[] {
+  db.exec('SAVEPOINT consume_line');
+  const missing: PrivilegedCommand[] = [];
+  for (const { action, params } of commands) {
+    const digest = paramsDigest(params);
+    const consumed = consumeApprovalRow(db, {
+      scope,
+      action,
+      paramsDigest: digest,
+      nowMs,
+      startEvent: { type: 'action.started', data: { scope, action, paramsDigest: digest, paramsSummary: paramsSummary(params), source: 'approval' } },
+    });
+    if (consumed === null) missing.push({ action, params });
+  }
+  if (missing.length === 0) {
+    db.exec('RELEASE consume_line');
+    return [];
+  }
+  db.exec('ROLLBACK TO consume_line');
+  db.exec('RELEASE consume_line');
+  return missing.map((privileged) => ({ action: privileged.action, requestId: recordPrivilegedDenial(db, { scope, tool, privileged, nowMs }) }));
+}
+
+function attendedMain(args: HookArgs): void {
+  if (args.policy !== undefined) fail('--attended takes no --policy');
+  if (args.dataRoot === undefined || !isAbsolute(args.dataRoot)) fail('--attended needs --data-root with an absolute path');
+  if (args.event !== 'pre' && args.event !== 'post' && args.event !== 'config-change') fail('--event must be pre, post or config-change');
+  // The owner's own session: a settings change and a finished call are not decided here.
+  if (args.event !== 'pre') return;
+  attendedPreToolUse(args.dataRoot, parseInput(readStdin()));
+}
+
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+  if (args.attended) return attendedMain(args);
   if (args.event === 'config-change') configChange(args.policy);
   if (args.event !== 'pre' && args.event !== 'post') fail('--event must be pre, post or config-change');
   if (args.policy === undefined) fail('--policy is required');

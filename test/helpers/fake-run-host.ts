@@ -565,7 +565,7 @@ export class FakeRunHost implements AgentHost {
     // let it): G2 sees a changed protected path.
     if (o.editPackageJson === true) {
       const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
-      manifest.scripts['test'] = 'node --test --test-name-pattern=nothing test/';
+      manifest.scripts['test'] = 'node --test --test-name-pattern=nothing "test/**/*.test.ts"';
       write('package.json', `${JSON.stringify(manifest, null, 2)}\n`);
     }
 

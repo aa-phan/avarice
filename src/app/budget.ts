@@ -18,6 +18,7 @@
 import { err, ok } from '../domain/result.ts';
 import type { Result } from '../domain/result.ts';
 import type { OnboardingContract } from '../domain/onboarding-contract.ts';
+import { BROAD_DISCOVERY_PER_RUN, RETRIEVAL_ROWS } from '../domain/retrieval-rules.ts';
 import type { RunContract } from '../domain/run-contract.ts';
 import type { BudgetRow, BudgetRowInput, OnboardingRow, RunRow } from '../ports/ledger.ts';
 import type { InvocationPurpose, OnboardingPurpose } from '../ports/agent-host.ts';
@@ -72,6 +73,20 @@ export function budgetRowsOfRun(contract: RunContract): BudgetRowInput[] {
     { name: 'subagentsTotal', limit: b.subagentsTotal, exactness: 'exact' },
     { name: 'wallClockMs', limit: b.wallClockMinutes * 60_000, exactness: 'exact' },
     { name: 'costUsd', limit: b.costUsd.perRun, exactness: b.costUsd.exactness },
+    ...retrievalRowsOfRun(contract),
+  ];
+}
+
+// The retrieval counters of a run (plan 04-28; CON-11): searches, whole-file reads and their bytes, and the one broad discovery a contract may authorize (limit 1 when it does,
+// 0 when it does not, so the row says which). A contract compiled before they existed has none, and a run on it counts retrievals in memory against the profile's caps.
+export function retrievalRowsOfRun(contract: RunContract): BudgetRowInput[] {
+  const r = contract.budgets.retrieval;
+  if (r === undefined) return [];
+  return [
+    { name: RETRIEVAL_ROWS.searches, limit: r.searches, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.fullReads, limit: r.fullReads, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.fullReadBytes, limit: r.fullReadBytes, exactness: 'exact' },
+    { name: RETRIEVAL_ROWS.broadDiscovery, limit: r.broadDiscovery ? BROAD_DISCOVERY_PER_RUN : 0, exactness: 'exact' },
   ];
 }
 
@@ -161,6 +176,18 @@ export function reserveInvocation(deps: AppDeps, onboarding: OnboardingRow, purp
     wallClockCapMs: body.budgets.wallClockShares[purpose] * 60_000,
     subject: { onboardingId: onboarding.onboardingId },
   });
+}
+
+// The cost cap the next invocation of an onboarding would be granted, read without reserving anything: the smaller of the contract's per-invocation cap and what is
+// left of the run's cost budget, the same figure reserveFrom hands the host. The knowledge pass sizes its corpus from it (plan 04-35, `knowledgeChunkLimit`).
+export function invocationCostCap(deps: AppDeps, onboarding: OnboardingRow): Result<number> {
+  const contract = loadContract(deps, onboarding.onboardingId);
+  if (!contract.ok) return contract;
+  const rows = deps.ledger.getBudgets(contract.value.runId);
+  if (!rows.ok) return rows;
+  const left = rows.value.find((row) => row.name === 'costUsd');
+  const perInvocation = contract.value.body.budgets.costUsd.perInvocation;
+  return ok(left === undefined ? perInvocation : Math.min(perInvocation, remaining(left)));
 }
 
 // A run's reservation (CON-13): the run's own rows, one invocation, the whole remaining wall clock up to the contract's, and the

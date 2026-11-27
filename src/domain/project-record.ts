@@ -23,7 +23,7 @@ export interface ProjectRecordInput {
   stagingPath: string;
   codebase: readonly CodebaseArtifact[];
   snapshot: string;
-  mapping: { mode: MappingMode; scope: readonly string[]; mappedAt: string; freshness?: 'fresh' | 'stale' };
+  mapping: { mode: MappingMode; scope: readonly string[]; mappedAt: string; freshness?: 'fresh' | 'stale'; provenance?: 'adopted' };
   notMapped: readonly string[];
   // Version reported by the located gsd-core (`runtime-identity`); `unknown` when none was recorded.
   gsdVersion?: string;
@@ -41,6 +41,8 @@ export interface ProjectRecordInput {
   execution?: Partial<RecordExecution>;
   // The indexes the index stage built, already folded from its step results (foldIndexResults).
   indexes?: RecordIndexes;
+  // The map was made by `onboard --restricted` (plan 04-24; CON-4, D-12): a fast map under the restricted launch, never whole-repository coverage.
+  restricted?: boolean;
 }
 
 // Something validation or narrowing noted about this record: a name and a reason, never document text.
@@ -144,12 +146,16 @@ export interface ProjectRecord {
     completeness: Completeness;
     mappedAt: string;
     freshness: 'fresh' | 'stale';
+    // Present only for a map nobody ran: an existing GSD map adopted after GSD's drift check passed in staging.
+    provenance?: 'adopted';
   };
   indexes: RecordIndexes;
   notMapped: string[];
   paths: RecordPaths;
   execution: RecordExecution;
   commands: ProposedCommand[];
+  // Present only for a restricted onboarding, and then always `true` and the last key; a contained record has no such key, so its digest is what it was.
+  restricted?: true;
 }
 
 // Defaults grant nothing: no write paths, no endpoints, no credentials. Repository proposals and later
@@ -195,9 +201,11 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
     mapping: {
       mode: input.mapping.mode,
       scope: [...input.mapping.scope],
-      completeness: completenessFor(input.mapping.mode),
+      // An adopted map is complete only when every full-map file is among those recorded (ONB-7).
+      completeness: completenessFor(input.mapping.mode, input.codebase.map((c) => c.path)),
       mappedAt: input.mapping.mappedAt,
       freshness: input.mapping.freshness ?? 'fresh',
+      ...(input.mapping.provenance !== undefined ? { provenance: input.mapping.provenance } : {}),
     },
     indexes: copyIndexes(input.indexes),
     notMapped: [...input.notMapped],
@@ -216,6 +224,7 @@ export function buildProjectRecord(input: ProjectRecordInput): ProjectRecord {
       credentials: [...(execution.credentials ?? [])],
     },
     commands: (input.commands ?? []).map((c) => ({ name: c.name, argv: [...c.argv], provenance: c.provenance, status: c.status })),
+    ...(input.restricted === true ? { restricted: true as const } : {}),
   };
 }
 

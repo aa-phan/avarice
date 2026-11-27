@@ -543,7 +543,10 @@ const KNOWLEDGE_DOCS: Readonly<Record<string, string>> = {
   'docs/decisions/ADR-002-hosting.md': `# ADR-002: Hosting (${HOSTILE})\n\nStatus: accepted\n\nThe service runs on one machine. ${HOSTILE}. The ledger port stays the only writer, as ADR-001 says.\n`,
   'docs/architecture.md': '# Architecture\n\nThe entry point is src/index.ts, which adds two constants from src/x.ts and src/y.ts. Feature handlers live under src/features, one directory per feature. See ADR-001 for storage.\n',
 };
-const KNOWLEDGE_CASE_CAP_USD = 1.2;
+// Plan 04-34: the owner authorized 0.60 USD for this case on the Phase 4 admission run (LIVE-CASES.md), so AVARICE_LIVE_KNOWLEDGE_CAP_USD may lower the cap
+// and never raises it; anything that is not a positive number is ignored.
+const KNOWLEDGE_CAP_ENV = Number(process.env['AVARICE_LIVE_KNOWLEDGE_CAP_USD']);
+const KNOWLEDGE_CASE_CAP_USD = Number.isFinite(KNOWLEDGE_CAP_ENV) && KNOWLEDGE_CAP_ENV > 0 ? Math.min(KNOWLEDGE_CAP_ENV, 1.2) : 1.2;
 
 test('live 19 plan 01-19 decisions A and B: a full fast onboarding takes the intel snapshot itself and the knowledge pass runs with no shell, no skill and no subagent, and document nodes join the graph', opts, async (t) => {
   const run = await runLiveFastOnboarding('19-knowledge-onboarding', KNOWLEDGE_CASE_CAP_USD, { invocations: 3, perInvocationCapUsd: 0.5, extraFiles: KNOWLEDGE_DOCS });

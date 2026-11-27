@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "rules": [
+    { "id": "org.bad-effect", "action": "git.push", "effect": "permit" }
+  ]
+}

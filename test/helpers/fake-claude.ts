@@ -11,6 +11,8 @@ export const REPLAY = join(REPO_ROOT, 'test', 'fixtures', 'claude-fake', 'claude
 
 export interface FakeClaudeScript {
   version?: string;
+  // The flags `claude --help` lists (default: the ones host admission requires and --restricted).
+  helpFlags?: readonly string[];
   transcript?: TranscriptName | null;
   mapFiles?: 'all' | 'fast' | readonly string[];
   // Write the intel documents on a launch of `--agent gsd-intel-updater`.
@@ -19,6 +21,8 @@ export interface FakeClaudeScript {
   knowledge?: boolean;
   stamp?: string | false;
   writes?: Readonly<Record<string, string>>;
+  // Symbolic links to make in the working directory after the writes: relative path -> link target.
+  symlinks?: Readonly<Record<string, string>>;
   extraLines?: readonly string[];
   // Replaces the `result` text of the transcript's final result line (a pause question, for example).
   resultText?: string;
@@ -42,6 +46,12 @@ export interface LoggedArgv {
   pid: number;
 }
 
+export interface LoggedSpecs {
+  pid: number;
+  cwd: string;
+  files: Array<{ path: string; mode: number; text: string; writeError: string | null }>;
+}
+
 export interface FakeClaude {
   // The executable to hand to the adapter (AVARICE_CLAUDE_BIN).
   bin: string;
@@ -53,6 +63,8 @@ export interface FakeClaude {
   // The launches by purpose: the intel purpose runs with `--agent`, the map purpose without.
   launchesOf(purpose: 'map' | 'intel' | 'knowledge'): Launch[];
   argvs(): LoggedArgv[];
+  // What each launch found under `.claude/gsd-core` of its working directory (plan 04-34); a launch that found none logs none.
+  specs(): LoggedSpecs[];
   // The environment of each launch.
   envs(): Array<Record<string, string>>;
   // Pids of the background processes the fake started in its group.
@@ -86,6 +98,7 @@ export function makeFakeClaude(script: FakeClaudeScript = {}, parent?: string): 
       return lines(join(logs, 'started.log')).map((l) => JSON.parse(l) as Launch).filter((l) => purposeOf(l) === purpose);
     },
     argvs: () => lines(join(logs, 'argv.jsonl')).map((l) => JSON.parse(l) as LoggedArgv),
+    specs: () => lines(join(logs, 'specs.jsonl')).map((l) => JSON.parse(l) as LoggedSpecs),
     envs: () => lines(join(logs, 'env.jsonl')).map((l) => JSON.parse(l) as Record<string, string>),
     children: () => lines(join(logs, 'children.log')).map(Number),
   };

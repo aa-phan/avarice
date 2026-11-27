@@ -15,8 +15,10 @@ function shortRevision(revision: string): string {
 const sha7 = (sha: string): string => stripControl(sha).slice(0, 7);
 
 // The ledger's word and reason; an interrupted run is shown as paused, with what interrupted it as the reason.
+// A restricted run (plan 04-23; D-12) is labelled `restricted` in front of its state, so it is never read as a contained run that stopped.
 export function runStateWord(run: RunStatus): string {
-  return run.interrupted !== undefined ? stateWord(run.interrupted.presentedAs, run.interrupted.reason) : stateWord(run.state, run.reason);
+  const word = run.interrupted !== undefined ? stateWord(run.interrupted.presentedAs, run.interrupted.reason) : stateWord(run.state, run.reason);
+  return run.restricted === true ? `restricted ${word}` : word;
 }
 
 const BUDGET_ORDER = ['costUsd', 'invocations', 'toolCalls', 'subagentsTotal', 'wallClockMs'] as const;
@@ -104,6 +106,7 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
     detail(i.attemptId === null ? `interrupted at ${stripControl(i.step)}` : `interrupted attempt ${stripControl(i.attemptId)} at ${stripControl(i.step)}`);
     detail(`continue with: ${stripControl(i.resumeCommand)}`);
   }
+  if (run.restricted === true) detail('mode: restricted (analysis and planning only: no check and no gate ran, nothing is committed or handed off)');
   if (run.cancelRequestedAt !== undefined) detail(`cancel requested (${localTime(Date.parse(run.cancelRequestedAt), nowMs)})`);
   if (run.lastCheckpoint !== null) detail(`last checkpoint: ${stripControl(run.lastCheckpoint.nextAction)} (${localTime(Date.parse(run.lastCheckpoint.at), nowMs)})`);
   const branch = branchLine(run);
@@ -114,6 +117,10 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
     ...(run.checksNotRun ?? []).map(notRunEntry),
   ];
   detail(evidenceEntries.length === 0 ? 'evidence: none' : `evidence: ${evidenceEntries.join(', ')}`);
+  // Evidence the owner recorded by hand (plan 04-27), in the order it was recorded; it is no check and no gate input, so it has its own line, and only when there is one.
+  if (run.manualEvidence !== undefined && run.manualEvidence.length > 0) {
+    detail(`manual evidence (satisfies no gate): ${run.manualEvidence.map((m) => `${stripControl(m.name)}${m.ref === undefined ? '' : ` ${stripControl(m.ref)}`}`).join('; ')}`);
+  }
   detail(run.gates.length === 0 ? 'gates: none' : `gates: ${run.gates.map((g) => `${stripControl(g.gate)} ${g.passed ? 'passed' : 'failed'}`).join(', ')}`);
   for (const item of run.items ?? []) detail(itemLine(run, item));
   if (run.openDecisions > 0) detail(`decisions: ${run.openDecisions} open (see avarice inbox)`);
@@ -122,6 +129,9 @@ export function renderRunDetails(run: RunStatus, nowMs: number, _width: number):
   if (banners !== null) detail(banners);
   const budget = budgetLine(run);
   if (budget !== null) detail(budget);
+  if (run.staleReferences !== undefined && run.staleReferences.length > 0) {
+    detail(`stale references: ${run.staleReferences.map((r) => `${stripControl(r.provider)} ${stripControl(r.kind)} ${stripControl(r.id)} (${stripControl(r.freshness)})`).join('; ')}`);
+  }
   if (run.references.length > 0) detail(`references: ${run.references.map((r) => `${stripControl(r.kind)} ${stripControl(r.id)} at ${shortRevision(r.revision)}`).join('; ')}`);
   return `${lines.join('\n')}\n`;
 }

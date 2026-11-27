@@ -1,0 +1,5 @@
+{
+  "profile": { "id": "enterprise-acme", "class": "enterprise" },
+  "remotePatterns": ["github.example.com/acme/*"],
+  "policy": { "organizationFile": "policy.json" }
+}

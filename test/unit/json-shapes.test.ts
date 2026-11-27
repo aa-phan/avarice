@@ -18,6 +18,7 @@ import { SandboxedExecutor } from '../../src/adapters/exec/sandboxed-executor.ts
 import { FakeAgentHost } from '../helpers/fake-agent-host.ts';
 import { FakeIntelHost } from '../helpers/fake-intel-host.ts';
 import { writeFakeGraphify } from '../helpers/fake-graphify.ts';
+import { writeFakeGsdCore } from '../helpers/fake-gsd-core.ts';
 import { EXPIRY_WAIT_MS, REPO_FILES, onboardingIdOf, runWithFault, sleepSync, statusCli } from '../helpers/fault-run.ts';
 import { makeRoots, runCli } from '../helpers/run-cli.ts';
 import type { CliRoots } from '../helpers/run-cli.ts';
@@ -193,6 +194,31 @@ describe('Phase 1 --json shapes are frozen (D-19, success criterion 7)', () => {
       assert.equal(ran.code, 0, ran.err);
       compareWithFixture('context-active.json', ran.out, [o.roots.base, o.repo.base, o.graphifyDir]);
     });
+  });
+});
+
+// Plan 04-25 (OPS-1): `doctor --json` is a new document, so it is a new fixture; no earlier fixture changes. The two values that follow the machine, the Node version and the
+// bundled SQLite version, and the store's size in bytes, are replaced before comparing (they stay strings, so the shape is still compared exactly). The profile has an admitted gsd-core and no host, so
+// nothing in it depends on whether the OS sandbox can run where the test runs.
+describe('doctor --json is frozen (plan 04-25, OPS-1)', () => {
+  it('doctor --json on an initialized profile with an admitted gsd-core, no host and no graphify', () => {
+    const roots = makeRoots();
+    const gsd = writeFakeGsdCore(temp('shape-doctor-gsd'), { version: '1.17.0' });
+    cleanup.push(roots.base);
+    const home = realpathSync(roots.base);
+    // The Claude configuration directory is a temp one as well, so the owner's own never shows in the snapshot.
+    const env = { HOME: home, CLAUDE_CONFIG_DIR: join(home, '.claude'), GSD_HOME: gsd, AVARICE_GRAPHIFY_BIN: '/nonexistent' };
+    const init = runCli(['status'], { roots, env });
+    assert.equal(init.code, 0, init.stderr);
+    const ran = runCli(['doctor', '--json'], { roots, env });
+    assert.equal(ran.code, 0, ran.stdout + ran.stderr);
+    assert.equal(ran.stderr, '');
+    const parsed = JSON.parse(ran.stdout) as { runtime: { node: { version: string }; sqlite: { version: string } }; store: { sizeBytes: number } };
+    parsed.runtime.node.version = '<node>';
+    parsed.runtime.sqlite.version = '<sqlite>';
+    // The size of an empty store is the page size times a page count that SQLite decides.
+    parsed.store.sizeBytes = 0;
+    compareWithFixture('doctor.json', JSON.stringify(parsed, null, 2) + '\n', [roots.base, gsd]);
   });
 });
 

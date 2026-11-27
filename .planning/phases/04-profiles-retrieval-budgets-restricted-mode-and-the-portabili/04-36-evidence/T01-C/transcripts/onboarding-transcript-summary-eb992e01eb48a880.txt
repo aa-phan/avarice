@@ -1,0 +1,1 @@
+{"sessionId":"ea797a68-215d-475b-bda6-167d558fceef","turns":53,"costUsd":0.5299351999999999,"toolUses":{"Edit":1,"Read":42,"Write":9},"resultText":"done"}

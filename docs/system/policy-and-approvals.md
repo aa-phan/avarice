@@ -1,0 +1,238 @@
+# Policy and approvals
+
+A privileged action never starts on the agent's say-so. Policy can deny it outright, and otherwise only the owner at a terminal can approve it. This document describes that subsystem as implemented in the approval gate, the approve command, the approval rules and the action table (`src/app/authorize.ts`, `src/cli/commands/approve.ts`, `src/domain/approval.ts`, `src/domain/action-class.ts`). Policy evaluation and the files behind it are in `src/domain/policy.ts` and `src/adapters/fs/policy-sources.ts`. The shell forms that count as privileged are in `src/domain/privileged-commands.ts`, and the hook that refuses them is `src/hook/pre-tool-use.ts`, installed into the owner's own host sessions by `src/adapters/host-claude/attended-hook-install.ts`. The enforcement map is `src/domain/enforcement-map.ts`, and the manual equivalents are `src/app/manual-inputs.ts` with the commands that call them. The approval rows and their guards are in `src/adapters/sqlite/ledger.ts`, `src/adapters/sqlite/approval-rows.ts` and the profiles migration.
+
+An approval authorizes one action with exactly the parameters it was granted for, once, within 30 minutes. A decision answer, a plan, a contract amendment, a deadline and silence approve nothing. The approval flow is drawn in [approve-privileged-action.puml](diagrams/approve-privileged-action.puml). The tables are in [data-model.md](data-model.md), the profile keys in [profiles-and-credentials.md](profiles-and-credentials.md) and [config-reference.md](config-reference.md), and the command flags and exit codes in [cli-reference.md](cli-reference.md).
+
+## Actions and classes
+
+Every action AVARICE can take belongs to one of three classes, and the class lives in one table. A name that is not in the table is privileged, so an action added anywhere in the program starts as the most restricted class until someone classes it.
+
+| Class | Meaning | Actions |
+|---|---|---|
+| read | Observes the repository, the store or a run's status and changes nothing outside memory | `context.retrieve`, `repo.read`, `status.read` |
+| local-write | Writes only inside the profile's roots, the staging copy or a local branch the run owns | `workspace.write`, `staging.write`, `artifact.store`, `handoff.local-branch` |
+| privileged | Leaves the machine, changes a shared system, or writes into the owner's repository | `git.push`, `scm.pr.create`, `scm.pr.update`, `scm.pr.merge`, `scm.api.write`, `scm.comment.create`, `tracker.write`, `release.publish`, `deploy`, `export`, `onboarding.promote.copy`, `onboarding.promote.commit`, `net.insecure-transport`, `net.unauthenticated`, `net.egress-unlisted` |
+
+The last three privileged names are the transport rules: a request that is not TLS, a request with no authentication, and a request to a host off the allowlist. The built-in policy denies them, and no file can change that.
+
+Only some of the 22 names are produced by running code. The hook's classifier names `git.push`, the three `scm.pr` actions, `scm.api.write` and `release.publish`, and promotion names the two `onboarding.promote` actions. The remaining names have a class and no call site.
+
+## Policy sources and ranks
+
+Four ranked sources decide whether an action is allowed, denied or needs an approval. Each source is a file the owner or the organization writes, or the built-in table.
+
+| Rank | Source | Where it comes from |
+|---|---|---|
+| 1 | Organization file | The path in the profile config key `policy.organizationFile`, read only under an enterprise profile and resolved against the profile's own configuration directory |
+| 2 | Built-in defaults | The code: reads and local writes allowed, privileged actions need approval, the three transport rules denied |
+| 3 | User policy | The rest of the profile config's `policy` section: `schema` and `rules` |
+| 4 | Repository policy | `.avarice/policy.json` in the repository, read from the pinned commit |
+
+A policy file is data. It has `schema` 1 and a list of at most 256 rules, in at most 64 KiB, and any other key is refused. A rule has an `id` and an `action`, each of 1 to 64 lower-case letters, digits, dots, underscores and hyphens, starting with a letter or a digit. It has an `effect` of `allow`, `deny` or `require-approval`, and optionally a `when`. A require-approval rule only may carry an `approvalSource`, 1 to 32 lower-case letters, digits or hyphens, starting with a letter or a digit.
+
+A `when` holds 1 to 8 parameter names (a letter followed by up to 31 letters or digits) with non-empty string values of at most 128 characters. The rule applies only when every named parameter is present and equal. A number or a boolean parameter is matched by its text, and any other value has no text to match. Rule IDs are unique within a file, and the prefixes `builtin.` and `sec5.` and the ID `org.invalid-or-missing` are reserved. A file that breaks any of this is refused whole.
+
+The evaluation runs in this order, and the first step that applies decides.
+
+1. The three transport rules are fixed. They decide first and nothing changes them.
+2. A broken rank 1 denies every privileged action with the rule `org.invalid-or-missing`, whatever the other ranks say. Rank 1 is broken when a file is expected and unusable: unreadable, a symbolic link, not a regular file, over 64 KiB, not JSON, or not a valid policy. It is also broken when an enterprise profile names no file or names one that does not exist.
+3. A rule the organization file states for the action decides at rank 1, and lower ranks can only make the answer stricter. Of several matching rules in one file, the strictest wins, and the first of equals.
+4. Otherwise the built-in rule decides. Under a personal profile, a matching user rule replaces it, whether the rule loosens or tightens.
+5. Ranks 3 and 4 then replace the answer only with a stricter effect, in the order `allow`, `require-approval`, `deny`. Under an enterprise profile the user policy only tightens. The repository policy only tightens under every profile.
+
+A personal profile never reads `policy.organizationFile`, even when it is set. A policy file must be one that the parser produced for that same source. The builder of the sources refuses the whole evaluation with an `invalid` error when a file sits in a slot other than its own, for example a repository policy placed in the user slot. The evaluator's own rule for an unusable file, broken under rank 1 and absent at ranks 3 and 4, applies only to sources assembled without the builder. Text from a brief, a context item, tool output or model output has no slot to enter, and the evaluator takes no such text as a parameter.
+
+The organization file and the user section are read at the first evaluation of a command and kept, so an edit applies from the next command. The repository policy is read from git objects at the pinned commit, never from the working tree, so an uncommitted edit, or one a run makes in the owner's checkout, cannot change an answer. A repository policy that is a symbolic link, a submodule entry, not a regular file or over 64 KiB is refused, and a pin that is not a full lowercase commit hash is refused.
+
+Policy is evaluated by the approval gate and nowhere else. The run's hook has its own generated policy file, described in [containment.md](containment.md), which is unrelated to these four sources.
+
+## Approvals
+
+An approval has a request, a grant, at most one consumption and an end by expiry or revocation. Each step is a ledger transaction under the profile's store.
+
+**Request.** A request is an event, not a row. The gate or the hook writes `approval.requested` with a request ID (`apr_` and 26 characters), the scope, the action, the parameter digest, a bounded summary of the parameters and the rule that asked for approval. The scope is the run ID, the onboarding ID, or `attended:` and the host session ID for the owner's own session. A retry of the same action with the same parameters names the request that is still waiting and writes no second one. A request stops waiting when an approval answers it.
+
+**Parameters and digest.** The digest is SHA-256 of the canonical JSON of the parameters: keys sorted, no whitespace, so key order never changes it and any changed value does. Parameters with no canonical form, such as a number that is not finite, cannot be approved. The summary shown to the owner lists the parameters as `key=value` in key order and shows every bound key and value whole, never cut. Parameters that cannot be shown whole get no request. A set of parameters cannot be shown whole when any of these holds:
+
+- a key or a value other than the working directory is longer than 80 characters;
+- the working directory is longer than 512 characters;
+- the entries other than the working directory are longer than 400 characters together, joined with single spaces;
+- a key or a value holds a control character, which would be shown as a space;
+- a value has no canonical form;
+- the secret patterns match the joined entries, the working directory included, because the event that carries the summary is redacted on write and would differ from what the digest binds.
+
+The working directory (the `cwd` key an attended session binds) is the host's canonical path, not text the model writes into the command. It is shown whole under its own 512-character limit and counts against neither of the other two. The stored summary is at most 917 characters, under the 1,024 an event string may hold. The refusal reason names the key and its length or the cause, never the value, and says the owner can run the command at their own terminal, where the attended hook does not apply. The gate refuses the same way: it denies the action with the rule `privileged:unapprovable` and writes no request, while a contract that authorizes exactly those parameters still allows it, because no owner display is involved. The digest is what the approval binds. The summary is for the owner's eyes and is redacted when the event is written.
+
+**Grant.** `avarice approve` takes a request ID, shows the action, the scope, the summary, the digest and the grant it would make, and asks. Only a yes grants. Anything else exits 0 and writes nothing. A grant inserts one approval row (`apv_` and 26 characters) with the request's scope, action and digest, source `local-user`, the granter `owner:` and the operating system user name. The approval expires 30 minutes after the grant. A request is granted once: a second grant of the same request exits 3. An approval cannot be deleted, and its consumption and revocation times are set once and never changed, which database triggers enforce.
+
+**Who may grant.** The command refuses inside a run, without a terminal on both standard input and output, and from the process tree of a run. Those refusals happen before the profile is resolved, so a refusal creates nothing. It then refuses a profile whose data root another user owns. The rule is the one `decide` uses and is described in [autonomy-and-decisions.md](autonomy-and-decisions.md). Nothing else writes an approval, so an agent cannot approve its own request: it has no terminal, and its process descends from a run.
+
+**Consumption.** An action starts by consuming a usable approval in the same transaction that records the action's start. Usable means the scope, action and digest match, the approval is neither revoked nor consumed, and its expiry is strictly later than now. Of several, the oldest granted is taken. Two processes racing for one approval cannot both take it, because the transaction takes the store's write lock first and the update re-checks that the approval is still unconsumed. The start event carries the approval ID, so the log shows which approval paid for which action.
+
+**Expiry and revocation.** An approval that is not consumed within 30 minutes is never usable again, to the millisecond. `avarice approve --revoke` takes an approval ID and sets its revocation time. Revoking an approval that is already revoked or already consumed exits 3. A fresh approval after an expiry gets a new row and a new key: the key is SHA-256 of the scope, action, digest and an ordinal that counts the earlier approvals of the same three.
+
+**Exits.** `approve` exits 0 for a grant, a decline and a revocation. It exits 3 for a request already approved, and for an approval already revoked or consumed. It exits 64 for a usage error, an unknown request or approval, and every refusal above. It exits 70 for an internal failure.
+
+## How an action reaches an approval
+
+The approval gate is the one place that says whether a privileged action may start. It runs in this order.
+
+1. Policy is evaluated for the action and its parameters. A deny ends it, and the rule that denied it is returned.
+2. A privileged action, or any action that needs an approval, is denied with the rule `interrupted-action-open` while an earlier start of the same action with the same parameters has no end. Nothing is recorded (see [No replay after an interruption](#no-replay-after-an-interruption)).
+3. An allow lets a read or local-write action through with no record. A privileged action that an explicit rule allows starts with its start recorded and the source `policy`.
+4. A require-approval result needs a source. The first source is a contract authorization that names exactly this action and exactly these parameters, which records a start with the source `contract`.
+5. The second source is an approval consumed with the start, recorded with the source `approval`.
+6. With no source, if the parameters cannot be shown to the owner whole (see Parameters and digest), the action is denied with the rule `privileged:unapprovable` and no request is written.
+7. Otherwise the action is denied with the rule `approval-required:` and the request ID, and the message names the command the owner runs.
+
+A policy rule can name an `approvalSource`, but every approval is written with the source `local-user`, so a rule that names another source is satisfied by the owner's approval all the same. The gate has one caller in the built system, the promotion of an onboarding's map into the owner's checkout, which names itself in the contract so that the owner's onboarding command is the authorization. Every other privileged action reaches the owner through the hook. The hook does not evaluate policy rules. It classifies the command and then refuses it or consumes an approval, so a rule's `approvalSource` and a rule that allows the action are not read there.
+
+## Privileged commands in the hook
+
+The hook classifies every command in the shell lines an agent runs. A command that leaves the machine or changes a shared system is a privileged action, named by the action table. The hook recognizes seven forms.
+
+| Command | Action |
+|---|---|
+| `git push` | `git.push` |
+| `gh pr create` | `scm.pr.create` |
+| `gh pr merge` | `scm.pr.merge` |
+| `gh pr edit` | `scm.pr.update` |
+| `gh release create` and `npm publish` | `release.publish` |
+| `gh api` with a method other than GET | `scm.api.write` |
+
+**What the classifier reads.** It reads a line as the shell would split it, and it runs and expands nothing. It follows single and double quotes, `$'...'` and `$"..."` strings, backslashes and a backslash before a newline, comments that start a word, command substitution, arithmetic expansion, backquotes and process substitution, also inside double quotes. A redirection and its target are not words of the command. A here-document body is read as commands and is read tolerantly, because it may be fed to an interpreter. It is read the same way when its delimiter is quoted. A body line that begins with a privileged command, such as a commit message line that starts with `git push`, is therefore read as that command. The owner approves it or rewords it. The line is split at `;`, `&`, `&&`, `|`, `||`, newlines and parentheses. A command inside a substitution is found before the command that holds it. A command substitution in the body of an unquoted here-document is counted once, so a `$(git push)` there is one privileged command and needs one approval.
+
+Before the program the classifier skips assignments, the reserved words of compound statements and wrappers with their options. The wrappers are `env`, `command`, `exec`, `nohup`, `builtin`, `time`, `nice`, `sudo`, `doas`, `timeout` (and its duration) and `xargs`. The wrappers also include `setsid`, `stdbuf`, `ionice`, `flock` (and its lock file), `taskset` (and its mask or list), `arch`, `caffeinate`, `unbuffer` and `chronic`. `coproc` is a reserved word, so the word after it is the program. `command -v` and `command -V` only look a program up and run nothing, and `taskset -p` changes a running process and starts nothing. The classifier also ignores the program's directory and letter case and reads past git's global options. For `gh` it also reads past options placed between the group and the subcommand. So `gh pr -R owner/name create` and `gh release -R owner/name create v1` are classified. The repository is bound the same whether the option comes before or after the subcommand.
+
+Some commands run other commands, and the classifier reads the commands they run as commands of the line.
+
+- A shell (`sh`, `bash`, `zsh`, `dash` or `ksh`) given a literal `-c` string, `eval`, the string of `su -c` (also `--command` and `-lc`) and the first operand of `trap` run that string as commands. The classifier reads those commands the same way, one level deeper. `trap` runs nothing with a single operand, with `-` as its first operand, or when an option such as `-p` or `-l` comes first.
+- `find` runs the words of each `-exec`, `-execdir`, `-ok` and `-okdir`, up to the closing `;` or the `+` that follows `{}`. With no closing word they run to the end of the line.
+- `parallel` runs the words before `:::` as a command string, with each `:::` argument appended as one quoted word or put in place of `{}` or `{1}`. With no command, each `:::` argument is itself a command string. `watch` runs the words after its options as a shell string, or as the command itself with `-x` or `--exec`.
+- A here-string given to a shell is that shell's input. It is classified when the shell has neither a `-c` string nor a script operand: `bash <<< 'git push'`, also behind `sudo` or `env`, and with `-s` or `-`.
+
+A `gh api` call with a field or input option and no method counts as a POST. `npm publish --dry-run` is classified privileged. The npm subcommand is the first word that is an npm command, with the unambiguous abbreviations npm accepts, so `npm pub` is a publish while `npm install publish` and `npm view publish` are not.
+
+**Three outcomes.** A line holds no privileged command, holds one or more, or cannot be checked. A line cannot be checked in these cases.
+
+- It is longer than 65,536 characters.
+- It nests commands more than 8 levels deep (a here-document body and a shell string each count as one level).
+- It has more than 16 assignment, reserved or wrapper words before the program.
+- It leaves a quote, a `$'...'` string, a substitution or a backquote unclosed, or nests backquotes more than two deep.
+- It defines a git alias or a config include on the command's own line, because the alias or the included file can stand for any command. The forms are a `-c` or `--config-env` key that starts with `alias.`, `include.` or `includeif.`, and a `GIT_CONFIG_KEY_<n>` variable with such a key. A `GIT_CONFIG_PARAMETERS` value that holds one is refused too, also when an outer assignment hands it to a shell string. In an attended session the reason says the line defines a git alias or a config include, which cannot be checked, and asks for the command it stands for to be run. A run denies the line as `shell-syntax` with that rule's own reason.
+- A brace expansion or a glob decides which command runs. That is one in the program word or any word before it (an assignment, a wrapper, a wrapper's option or operand). It is also one in git's global options, their values and its subcommand. The same holds for `gh`'s group, the options before its subcommand and the subcommand, and for npm's words up to its subcommand (every word when it has none). It is also one that forms the string of a shell, `su` or `trap`, or the option that introduces it, and one that forms an `-exec` style option of `find`. A brace expansion anywhere in a privileged command is refused too, so `git push origin {main,dev}` cannot be checked. In an attended session the reason says a brace expansion or a glob decides which command runs and asks for the command written without it. A run denies the line as `shell-syntax` with that rule's own reason.
+
+Outside quotes and not after a backslash, an expansion word is a brace group or a glob. A brace group is a `{` with a later `}` and a `,` or `..` between them. A glob is `*`, `?`, or a `[` with a later `]` in the same word. A lone `[`, `{owner}` with no comma, the reserved words `{` and `}`, the body of `${...}`, `$*`, `$?` and the words of a case pattern are not expansion words. Neither are the words in the arguments of any other program: `mkdir -p src/{a,b}` and `git add src/{a,b}.ts` are not privileged and are not refused. The rule over-refuses in two places. An assignment before the program that holds a `?` or a `*` is refused although the shell does not expand assignment words. A `find` whose own words begin with a brace word such as `{src,test}` is refused too. Zsh-only forms (extended globs and `=cmd`) are not read as expansions.
+
+Such a line is refused. No limit and no failure to read is taken as "not privileged".
+
+**What an approval binds.** An approval binds the target of the effect and the names of the options given, never an option's value, so a title or a body is not bound and `--force` is. It also binds what changes a command's effect from outside its own options:
+
+- git's global options before the subcommand, with their values (`-C dir`, `-c name=value`, `--git-dir=...`);
+- the assignments before the program and the options and assignments given to an `env` wrapper, verbatim and in order, whatever the name, since `HOME` and `XDG_CONFIG_HOME` steer git and gh too;
+- a digest of the exact text of the line, which ties an earlier `cd`, an earlier `git config`, a wrapper's options, `--receive-pack` and an inline `gh api` body to the command the owner saw;
+- in an attended session, the canonical path of the directory the call runs in.
+
+| Action | Parameters taken from the command's own words |
+|---|---|
+| `git.push` | `remote`, `refspec`, `repo`, `options` |
+| `scm.pr.create` | `base`, `head`, `repo`, `options`, `operands` |
+| `scm.pr.merge` and `scm.pr.update` | `selector`, `base`, `repo`, `matchHeadCommit`, `options`, `operands` |
+| `release.publish` from `gh` | `tag`, `target`, `repo`, `assets`, `options` |
+| `release.publish` from `npm` | `package`, `registry`, `tag`, `access`, `options`, `operands` |
+| `scm.api.write` | `endpoint`, `method`, `hostname`, `options`, `operands` |
+
+Every row also carries the line digest, and `gitOptions`, `env` and, in an attended session, the working directory when the command has them. Because the exact line is bound, the same command written another way needs its own approval: a changed title, a different order of options, a `cd` added in front. An approval for `git push origin main` in one repository does not cover it in another.
+
+The request the owner sees shows every bound value whole, or the command is refused as unapprovable (see Parameters and digest). The digest binds the same values the summary shows.
+
+**In a run.** Every privileged form is denied with the rule `privileged:` and the action, whatever the run's command set holds. A line that holds several privileged commands is denied with the rule of the first, and the denial names one request. The hook records the request, or names the one still waiting, and the denial in one transaction, and tells the agent which command the owner runs. A line that cannot be checked is denied with the run's own shell rule `shell-syntax`. A run refuses any line longer than 16,384 characters as `shell-syntax` before the classifier reads it. A `gh api` command whose body comes from a file or standard input is denied as `privileged:scm.api.write`, like any other write through the API. A line whose first privileged command has bound values that cannot be shown to the owner whole is denied with the same `privileged:` rule and no request. One `policy.denied` event is recorded with the action, the parameter digest and a reason that names the key and not the value. The denial text says no approval was asked for because a bound value cannot be shown whole. A run never consumes an approval, so a retry after the owner approves is denied again and records a fresh request, because the earlier one was answered. A privileged form is therefore never delivered from inside a run.
+
+**In an attended session.** The owner's own host session can carry the same hook as a settings entry, installed by `install-host` into the host's settings file. The entry applies to Bash calls only, runs with a 5-second timeout and blocks the call when the hook fails. It enforces privileged approvals and nothing else: a call that holds no privileged command, and every other tool, passes with no decision, no event and no store access. A call that holds a privileged command, or that cannot be checked, needs two things from the host. One is the session ID, which must be a plain token of up to 100 letters, digits, dots, underscores and hyphens. The other is the working directory of the call, as an absolute path of an existing directory. Without either the hook fails and the call is blocked. The call then has one of four outcomes.
+
+1. **It cannot be checked.** The call is denied with the rule `privileged:unparseable`. The reason says what stopped the read and suggests splitting the line or writing files with the Write tool. One `policy.denied` event is recorded with the reason and no command text. No request is made, because nothing is named that the owner could approve.
+2. **A command cannot be approved.** A `gh api` command with `--input`, or with a `-F` or `--field` value that starts with `@`, takes its body from a file or standard input. An approval cannot bind that. The whole line is denied with the rule `privileged:unapprovable` before any approval is consumed and before any request is made. The reason tells the agent to pass the fields inline with `-f name=value` or `-F name=value`. One `policy.denied` event is recorded for each such command, with no command text. The same rule and the same handling apply to a command whose bound values cannot be shown to the owner whole, the working directory included. A padded `-c` option, for example, could hide a second option that redirects the push, so the line is refused instead. The reason names the key and its length or the cause and says the owner can run the command at their own terminal.
+3. **Every privileged command has an approval.** Each command of the line consumes one usable approval of the scope `attended:` and the session ID, with its action and its parameter digest, oldest granted first. The approvals are consumed together in one transaction, and each command records its own `action.started` event naming its approval. The line then passes. A command that appears twice on a line needs two approvals.
+4. **At least one command has none.** No approval is consumed, including those another command of the line holds, and the line is denied. The denial names a request for each command that lacks an approval, in line order. Each reads `<action> needs an approval for these parameters; the owner approves it at a terminal with: avarice approve <request>`. One `policy.denied` event is recorded for each such command. A request already waiting for the same scope, action and digest is named again and writes no second one. A line that names the same command twice with no approval for either therefore names the one waiting request twice. The owner approves it once, and the next denial names a new request for the second command.
+
+After the owner approves, the same line in the same session and directory passes once. The hook prints no allow, so the host's own permission rules still apply and an approval never widens what the host asks.
+
+**What the classifier cannot see.** These are not classified and not bound:
+
+- a command name built at run time (a variable, an alias, a function), a script that pushes, a shell started on a computed string and text piped into a shell;
+- the arguments a wrapper reads from standard input: `xargs`, `parallel` fed from a pipe, and a `::::` file of `parallel`;
+- an interpreter running a code string (`node -e`, `python -c`), and other programs that run commands (`make`, `ssh`, `script`, `expect`);
+- repository or shell state changed by an earlier separate call: a remote's URL, git config, a git alias or config include set earlier, an exported variable;
+- the git config files a line names (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `GIT_CONFIG`): the assignment is bound with the other environment words, and the content of the file is not read;
+- a glob in the arguments after a privileged subcommand (`git push origin refs/heads/*`): it is pathname globbing, which the classifier does not expand. It is bound as written, so the approval binds the pattern, not the files the shell matches;
+- an npm option the classifier does not list whose value is the name of an npm command, which can hide the subcommand;
+- commands run outside the host, and a removed hook entry, which the hook cannot see. For a run the launch checks refuse to start without the entry.
+
+The SCM platform's own protections are the authoritative control for these. In a run the sandbox, which has no network and no credentials, holds as well.
+
+## No replay after an interruption
+
+A privileged action whose start is recorded and whose end is not may have taken effect, so it is never run again on its own. The gate enforces this at the start. While an earlier start of the same action with the same parameters has no end, a second start is denied with the rule `interrupted-action-open`. The message names the earlier start, and nothing is recorded. An end names the start it closes, so two open starts of one action are closed one at a time. An end that names no start closes the earliest open start of its action, and an end with no open start of that action is refused.
+
+The gate also finds such an action when the scope resumes and opens one permission decision for each, in the order the starts were recorded. The decision names the action and its parameter summary, cites the start event, and offers only `withdraw`, because nothing can be answered into an approval. The start is marked with an `action.interrupted` event after its decision exists, so a resume that is itself interrupted opens no second decision.
+
+A run that finds such a start stops as blocked on a decision with the reason `enforcement_failure`, not `decision`. With `decision`, the supervisor would treat a run with a ready item as continuable and could run an item beside an open permission decision. A run that was already blocked on a decision for another reason, an answered item decision for example, is paused and blocked again with `enforcement_failure`, so the resume does not continue it. The cost is that withdrawing the decision does not release the run, so the owner's way out is `avarice cancel`. An onboarding takes the same decision on its carrier run. An attended session has no decision to attach to: its interrupted starts are marked and returned, and nothing asks the owner about them.
+
+## Enforcement map
+
+The enforcement map is a code table of 18 controls: who enforces each one, what AVARICE's part is, how the control can be bypassed, and the test that proves it. The enforcer is `host` (the agent host), `os-sandbox`, `external-platform` or `avarice`. A proof is a tracked test file, or the reason none exists. No command prints the table, and a unit test holds it to its shape.
+
+| Control | Enforcer | AVARICE's part | Limit | Proof |
+|---|---|---|---|---|
+| `scm-branch-protection`: branch protection, required reviews, required checks | external-platform | Records status | None from AVARICE's side; the platform is the authority | None possible: the platform owns it |
+| `ci-gates`: CI and deployment gates | external-platform | Records results | AVARICE cannot loosen or replace them | None possible |
+| `identity`: identity, MFA, token lifetime | external-platform | Uses delegated credentials | A run holds no credential of its own | None possible |
+| `host-managed-permissions`: host permission rules and managed settings | host | None | Whether managed-only permission rules hold is not established; no profile claims it | Unverified |
+| `sandbox-confinement`: shell and child-process confinement | os-sandbox | Generates the sandbox configuration per run and refuses to launch without it | Hooks and local MCP servers run outside the sandbox, and so does the host process | The sandboxed executor containment test |
+| `tool-call-decisions`: tool-call decisions in unattended runs | host | Evaluates the run's generated hook policy in the fail-closed PreToolUse hook; the host runs in `dontAsk` mode | Paths the containment document leaves unverified; a removed hook is caught by the launch checks, not by the hook | The hook integration test |
+| `budgets`: budgets | avarice | Owns the ledger counts; the host enforces `--max-budget-usd` per invocation | Cost is a client-side estimate reported after each invocation | The budget fault test |
+| `privileged-approval`: privileged-command approval in the host | host | Classifies every command of a Bash call in the PreToolUse hook the host runs and consumes one approval per privileged command, bound to the command's parameters, the exact line and the directory it runs in; a command no approval can bind (a `gh api` body from a file or standard input, or a bound value that cannot be shown whole) is denied with no request | Covers only the seven forms of the hook section; every other command, including the other `gh` and `git` forms, is not seen. Finds them behind the wrappers, launchers and string forms of the hook section. Does not see the residual list there: names built at run time, a script that pushes, a shell on a computed string, text piped into a shell, arguments a wrapper reads from standard input, interpreters running a code string, other programs that run commands, an npm option the classifier does not list whose value names an npm command, state or a git alias set by an earlier separate call, the content of git config files named on the line, and commands outside the host. A glob after a privileged subcommand is bound as written. A brace expansion or a glob that forms the command or its subcommand is refused as unreadable. A removed hook is caught by the launch preflight, not by the hook. The SCM platform's own protections are authoritative there | The privileged-command hook integration test |
+| `approval-single-use`: approval single-use and binding | avarice | Owns the approval ledger and the parameter digest | A user with file access can edit the database | None named in the table |
+| `profile-isolation`: profile isolation | avarice | Owns the per-profile roots and the sandbox denial of other profiles | A user can copy files between directories; a profile moved by environment variable is covered only when its configuration is found, and a corrupt configuration cannot say where its roots moved, so only that profile's directory and the default roots of its name are denied | The profile isolation integration test |
+| `redaction`: redaction before persistence | avarice | Owns the redactor applied at the event and log boundaries | Pattern-based; unknown secret formats can pass | The redaction suite |
+| `prompt-injection`: prompt-injection scanning | avarice | Fences retrieved text as data and keeps authority separate from it | Heuristic; authority separation is the control that holds | The context integration test |
+| `write-scope`: write scope | os-sandbox | Computes the write scope of each invocation and passes it to the sandbox and the hook | The working directory is always writable to shell commands; a process outside the sandbox is not confined | The run scope unit test |
+| `network-scope`: network scope | os-sandbox | Leaves an invocation no network; gives one supervisor step a loopback port to an allowlisting proxy | The proxy checks host names with no TLS inspection; MCP servers and hooks reach the network directly; the host's model traffic is outside the sandbox | The allowlist proxy integration test |
+| `credential-denial`: credentials absent from the run | os-sandbox | Rebuilds the environment from an allowlist and denies reads of credential directories | Denial is by path, not content; a credential in an allowed read root is readable; an allowed MCP server with its own credential can act | The invocation scope unit test |
+| `organization-policy-fail-closed`: organization policy file, rank 1 | avarice | Reads the file without following a link and denies privileged actions when it is missing or invalid under an enterprise profile | Tamper resistance holds only where managed settings or an external platform deliver the file | The policy precedence unit test |
+| `restricted-mode`: restricted mode when a layer is unavailable | avarice | Drops the run to restricted and refuses unattended runs; never substitutes instructions, an unapproved sandbox or an unapproved egress path | A restricted run produces a plan, a patch file and a decision list only, and the host must honor its restricted flag | None named in the table |
+| `hook-cost-fields`: finer budget enforcement from token or cost fields in hook input | host | None until the host provides the fields | Whether hook input carries those fields is not established; no profile relies on it | Unverified |
+
+Of the three rows that name host limitations, two are marked as claimed by no profile. The three platform rows have no proof because the platform owns the control. The two host-limitation rows are unverified because the question is open. The two rows with no test named say in the table that the proving test does not exist, although tracked integration suites for approvals and restricted mode test them. The `profile-isolation` row above states the built behavior; the code table's text differs and is recorded in [findings.md](findings.md). The `privileged-approval` row above also names the refusal of a value that cannot be shown whole as a case no approval can bind, and an unlisted npm option in its residual list. The code table's text names neither, and those differences are recorded in [findings.md](findings.md).
+
+## Manual equivalents
+
+Every integration has a manual route for an organization that prohibits it. The routes need no network and no host, and they write only the ledger and the artifact store.
+
+| Integration | Manual route |
+|---|---|
+| Tracker read | `avarice start --brief <file>` with the ticket text in the file |
+| Tracker write | `avarice comment --print --run <run>` prints a comment for the owner to paste |
+| Documentation retrieval | `avarice context add --file <file> --source "<title> rev <n>" --run <run>` |
+| CI results | `avarice evidence add --kind ci --file <file> [--ref <url>] --run <run>` |
+| Pull request creation | The owner opens the pull request in the web UI, then `avarice pr record <url> --run <run>` |
+| Approvals | `avarice approve <request>` in an interactive terminal |
+| Audit sink | No command: `avarice export` does not exist |
+
+Three commands record something: `context add`, `evidence add` and `pr record`. They refuse inside a run and from a run's process tree, with exit 64 before the profile resolves, and they need no terminal. `comment --print` records nothing and has no such refusal. The flags and exit codes of all four are in [cli-reference.md](cli-reference.md).
+
+**Context add.** The file is one pack's worth of text: non-empty, valid UTF-8, at most 16,000 bytes. The `--source` text is at most 200 characters, with no control characters, and is kept verbatim as the reference's identity. The text is stored redacted and offered to the run's next context pack as an untrusted item. Adding the same file under the same source again records nothing, and a new file under the same source replaces the earlier one.
+
+**Evidence add.** The kind is `ci`, `review` or `manual`, and the file is at most 2 MiB of UTF-8 text. AVARICE did not measure the content, so the row is `inconclusive`, independent of the run, and sits on a revision that no gate judges. It satisfies no gate and replaces no earlier row, and a second add is a second row. It attaches to the run's latest attempt, so a run with no attempt has nothing to attach it to.
+
+**Pr record.** The URL must be `http` or `https` with the path `/<owner>/<repository>/pull/<number>` and no credentials. Nothing is fetched, so nothing says whether the pull request exists or what state it is in. A query and a fragment are dropped. The same URL twice records once.
+
+**Comment print.** The comment is built from ledger rows only: the run, its state, its items' states, the checks that passed with the revision each passed at, and the open decisions. It writes nothing, posts nothing and passes through the redactor.
+
+## Quirks
+
+- An approval is tied to a scope and to parameters, not to who or what asks. Any process of the same scope that presents the same action and parameters within 30 minutes uses it.
+- An attended approval leaves an `action.started` event with no `action.finished`, because only the pre-tool-use entry is installed. Nothing reconciles an attended scope, so the dangling start is never reported to the owner.
+- The attended entry has a 5-second timeout and blocks on failure, so a slow or failing hook blocks the owner's own shell call.
+- An approval for a command is also an approval of the line it was written on. The same command in a longer line, or with its options in another order, is a different approval.

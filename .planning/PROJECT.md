@@ -8,6 +8,16 @@ AVARICE (Agent Verification, Automation, Runtime Integration, and Coordination E
 
 Set a goal and the operating boundaries, leave the desk, and come back to a verified, reviewable change or to a short list of genuine blocking decisions, with containment and evidence that do not depend on the model behaving.
 
+## Current Milestone: v1.1 MVP Completion
+
+**Goal:** Complete the PRD's MVP: AVARICE runs under separate profiles with capped, handle-first retrieval and an explicit restricted mode, and carries a verified change from `ready_for_review` to a draft PR and back on review feedback.
+
+**Target features:**
+- Separate profiles with no fallback, retrieval capped by budgets, parameter-bound approvals for privileged actions, restricted mode and `doctor`, adoption of existing GSD artifacts, and the adapter-portability proof (Phase 4, 28 requirements)
+- Draft PR delivery with no duplicates, review and CI feedback as new attempts, the mutation gate, the architecture-model check, the static dashboard, and backup, restore and uninstall (Phase 5, 13 requirements)
+
+Scope is adopted as specified at the v1.0 close (ROADMAP.md Phases 4-5, REQUIREMENTS.md traceability); no re-research or re-roadmap. Phase 9 (v1.0 tech-debt cleanup) stays last on the roadmap.
+
 ## Requirements
 
 Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are the PRD's own (`docs/requirements.md`). 105 normative requirements exist; 104 are mapped to phases and 1 (FR-23) is deferred.
@@ -18,12 +28,12 @@ Full text, scope labels and traceability: `.planning/REQUIREMENTS.md`. IDs are t
 - ✓ A contained, unattended run of one work item from a brief and the `routine` preset to `ready_for_review` or `blocked_on_decision`, surviving a kill (RC-1..5, CON-1/2/3/5/6/7/8/9/13/14/16, AUT-7..9, FR-1/2/4/5/6/7/11/27, NFR-1/3/5/6/9, OPS-2/7, ONB-10) — Phase 2 (35 plans; re-verified 2026-11-08 after gap-closure round 02-27..02-35, 8/8 success criteria; gaps G-02-H2 and G-02-H4 closed; security 122 threats, 0 open; UAT complete 2026-11-08, tests 4 and 5 deferred to backlog 999.4 and 999.5)
 - ✓ Decision records, independent work around an open decision, validated answers resuming the paused session, contract amendments, local notification, size-based models, bounded repair and subagents inside the parent budget (AUT-1..6/10/12/16, RC-6..8, CON-15) — Phase 3 (73 plans; verified 2026-11-15, 6/6 success criteria; three live exit runs 3 of 3 for 16.64 of 25 USD; security 0 open threats; Nyquist-compliant)
 - ✓ Milestone v1.0 Contained Kernel — shipped 2026-11-15 (62/62 requirements; audit `tech_debt`, 17 items scheduled as Phase 9)
+- ✓ Profiles with no fallback, handle-first retrieval with enforced caps, restricted mode, parameter-bound approvals for privileged actions, `doctor`, existing-GSD adoption and refresh, and the adapter-portability proof (ONB-6/11/15, FR-3/8/12..19/22, SEC-1..4/6/7, CON-4/10/11/12, OPS-1/5/6, NFR-4) — Phase 4 (verified 2026-11-25 after three gap closures, 70 plans)
 
 ### Active
 
-Milestone v1.1 MVP Completion (Phases 4-5, planned; completes the PRD's MVP):
+Milestone v1.1 MVP Completion (Phases 4-5, current milestone, started 2026-11-15; completes the PRD's MVP):
 
-- [ ] Profiles, handle-first retrieval with caps, restricted mode, privileged-action approvals, `doctor`, existing-GSD adoption and refresh, portability proof (Phase 4)
 - [ ] Delivery to a draft PR, review feedback attempts, mutation gate, architecture-model check, static dashboard, backup and uninstall (Phase 5)
 
 Milestone v2.0 Post-MVP Extensions (Phases 6-8, planned, trigger-driven):
@@ -114,7 +124,7 @@ No decision is locked: all 12 ADRs are Proposed. Treat them as proposals by aa-p
 | Milestone v1.0 closed with tech debt accepted; the cleanup is the last roadmap phase (Phase 9), after every implemented phase | Owner choice at close; none of the 17 items breaks a success criterion | 2026-11-15 — Pending |
 
 ---
-*Last updated: 2026-11-15 after v1.0 milestone*
+*Last updated: 2026-11-25 after Phase 4*
 
 ## Evolution
 

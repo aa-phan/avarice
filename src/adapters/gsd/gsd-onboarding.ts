@@ -4,6 +4,7 @@
 // edits `.planning/codebase/*.md` itself (ONB-2): the only writes this adapter causes are `config-set` and
 // `stamp-codebase-map`, both GSD's own, and (plan 01-14) `graphify build snapshot`, which writes the diff snapshot
 // of the graph AVARICE installed into `.planning/graphs`.
+import { PLANNING_INIT_REDUCED_MODE } from '../../domain/capability-requirements.ts';
 import { credentialPaths } from '../../domain/invocation-scope.ts';
 import { err, ok } from '../../domain/result.ts';
 import type { Result } from '../../domain/result.ts';
@@ -49,13 +50,16 @@ const MAX_GRAPH_EDGES = 2000;
 const MAX_GRAPH_BUDGET = 1_000_000;
 const MAX_TERM_CHARS = 200;
 
-// Static capabilities of the 1.17.x surface this adapter drives. `map-paths` and `ingest-docs` exist in GSD
-// but belong to Phase 4, so they are reported false here.
+// Static capabilities of the 1.17.x surface this adapter drives. `map-paths` is GSD's `--paths` scope on the map workflow (workflows/map-codebase.md
+// `parse_paths_flag`); `adopt-map` is taking a committed, stamped map whose `verify codebase-drift` passed, with no workflow run. `ingest-docs` exists
+// in GSD but this adapter does not drive it, so it is reported false; a step that needs it is refused with its reduced mode
+// (src/domain/capability-requirements.ts).
 const CAPABILITIES: Readonly<Record<string, boolean>> = {
   'init-onboard': true,
   'map-full': true,
   'map-fast': true,
-  'map-paths': false,
+  'map-paths': true,
+  'adopt-map': true,
   stamp: true,
   'verify-drift': true,
   'ingest-docs': false,
@@ -376,6 +380,6 @@ export class GsdOnboardingAdapter implements GsdOnboarding {
   }
 
   initPlanning(): Result<never> {
-    return err({ kind: 'unsupported', capability: 'init-planning', reducedMode: 'out of scope for Phase 1; planning initialization arrives in Phase 4' });
+    return err({ kind: 'unsupported', capability: 'init-planning', reducedMode: PLANNING_INIT_REDUCED_MODE });
   }
 }

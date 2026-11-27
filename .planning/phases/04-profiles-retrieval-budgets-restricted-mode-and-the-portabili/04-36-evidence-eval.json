@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "plan": "04-36",
+  "decision": "D-03, D-07, D-08",
+  "status": "complete: after owner ruling 3 the harness keeps per-run evidence, the diagnostic classified the portfolio-6 stop as the brief (fixed offline), and portfolio-6 ran 18 of 18 (AC-8 fails on tokens, D-08 keeps the knowledge pass on)",
+  "ruling": {
+    "ownerReply": "authorize balanced-9 pilot 11.70 total 33.00.",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-19T04:47:08Z",
+    "recordedBefore": "any evaluation run in the Phase 4 ledger (ledger at 38 lines, 3.926675 USD, all from plans 04-34 and 04-35, when this file was written)",
+    "choice": "authorize",
+    "meaning": "the recommendation in 04-36-pilot.json, accepted in full",
+    "taskSet": {
+      "name": "balanced-9",
+      "tasks": ["T01", "T04", "T06", "T07", "T10", "T13", "T16", "T17", "T20"],
+      "byRepository": {
+        "aa-phan-portfolio-v2": ["T01", "T04", "T06"],
+        "auto_search_workflow": ["T07", "T10", "T13"],
+        "GroceriesGPT": ["T16", "T17", "T20"]
+      },
+      "arms": ["A", "B", "C"],
+      "runs": 27
+    },
+    "pilot": { "tasks": ["T01", "T07", "T16"], "runs": 9, "capUsd": 11.7 },
+    "rest": { "tasks": ["T04", "T06", "T10", "T13", "T17", "T20"], "runs": 18, "capBoundUsd": 23.4, "condition": "runs only when its cap bound fits the conditional total cap minus the pilot's measured spend; otherwise stop and return to the owner" },
+    "conditionalTotalCapUsd": 33.0,
+    "mechanicalGuard": { "env": "AVARICE_PHASE4_CEILING_USD", "value": 36.93, "basis": "3.9267 USD Phase 4 spend before this plan's runs plus 33.00 USD; the variable can only lower the 40 USD ceiling (D-03)" },
+    "ac8RuleChange": {
+      "was": "AC-8 passes when the task success rate of arm B or arm C is at least the success rate of arm A and its total tokens are no more than 50% of arm A total tokens, over the 20 tasks.",
+      "now": "The same rule over the 9 balanced-9 tasks (3 per repository).",
+      "acceptedInWritingBy": "Aaron Phan, 2026-11-19T04:47:08Z",
+      "handling": "test/benchmark/phase4/eval-tasks.json and its sha256 (3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92) are not edited. The reduced set is selected by the --task-ids flag; this file and the plan summary record the reduction and the rule change.",
+      "weakerBecause": "9 tasks and 27 runs are a smaller sample than 20 tasks and 60 runs; a single task is 11% of a rate instead of 5%."
+    },
+    "harnessChangesAuthorized": [
+      "a --task-ids selector in scripts/eval-retrieval.ts: ids must be on the approved list, others refused, approved digest check kept",
+      "a merge so the rest's results join the pilot's in one results file without re-running a recorded (task, arm)",
+      "ONBOARD_CAP_USD.C from 0.90 to 1.10"
+    ],
+    "stopConditions": [
+      "6 or more of the 9 pilot runs end budget_exhausted, leave no branch to judge, or report a judging error",
+      "the rest does not fit the conditional total cap minus the pilot's measured spend",
+      "any single run or setup step that would pass the 11.70 pilot cap, the 33.00 total cap or the 40 USD ceiling"
+    ],
+    "hardLimits": "never exceed 11.70 for the pilot, 33.00 in total, or the 40 USD Phase 4 ceiling; fitsPhase4Ceiling before every model step; no other live claude use; the owner's private repositories are read-only (the harness clones at the parents into scratch)"
+  },
+  "ruling2": {
+    "ownerReply": "diagnose, then portfolio-6",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-19T17:48:42Z",
+    "recordedBefore": "any spend after the pilot (Phase 4 ledger at 42 lines, 4.812019 USD, plan 04-36 0.88534423 USD when this was written)",
+    "authorized": [
+      "one diagnostic run of T01 arm B with --keep (about 0.08 USD, capped at 0.40 USD) to read the decision record and classify the pre-model block; the kept scratch is removed once read",
+      "portfolio-6: tasks T01 to T06 (all aa-phan-portfolio-v2), arms A, B, C, 18 runs, with --node-modules aa-phan-portfolio-v2=<the owner's portfolio checkout>/node_modules (read-only use)"
+    ],
+    "taskSetChange": {
+      "was": "balanced-9 (T01, T04, T06, T07, T10, T13, T16, T17, T20), itself reduced from the 20 approved tasks by ruling 1",
+      "now": "portfolio-6 (T01, T02, T03, T04, T05, T06)",
+      "ac8RuleNow": "AC-8 (arm B or C succeeds at least as often as A at no more than 50% of A's tokens) is judged over these 6 portfolio tasks (18 runs)",
+      "acceptedInWritingBy": "Aaron Phan, 2026-11-19T17:48:42Z",
+      "handling": "test/benchmark/phase4/eval-tasks.json and its sha256 (3de7b1080203809485fbf4f7b968e9e29703490494a019b0750e2f1050f15d92) are not edited; the set is selected by --task-ids.",
+      "weakerBecause": "6 tasks on one repository are a smaller and less varied sample than 20 tasks on five; one task is 17% of a rate. T02 and T03 share a held-out test file and T03 builds on T02's parent chain. The two other repositories cannot be judged in this harness (a Python environment, a Postgres database).",
+      "supersededRuns": "the three T01 runs of the pilot (arms A, B, C: blocked_on_decision, 0 tokens, no branch) are superseded by the T01 re-run in portfolio-6 and are not counted in the verdict; they are kept in 04-36-pilot-results.json"
+    },
+    "caps": { "planTotalUsd": 33.0, "spentByPlanUsd": 0.88534423, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40, "portfolio6CapBoundUsd": "about 23.40 (to be checked against the harness's dry run before the first run)" },
+    "diagnosisRule": "a cause in the harness, the arm repository, a brief or the judge wiring is fixed offline (RED then GREEN, with a unit test) and the plan proceeds; a cause in AVARICE product code (src/) or a design decision stops the plan with a classification and fix options"
+  },
+  "ruling3": {
+    "ownerReply": "keep evidence, diagnose",
+    "owner": "Aaron Phan",
+    "repliedAt": "2026-11-20T02:06:38Z",
+    "recordedBefore": "any change or spend after portfolio-6 T01 (Phase 4 ledger at 50 lines, 6.231274 USD, plan 04-36 2.304598 USD when this was written)",
+    "authorized": [
+      "a harness change (RED then GREEN, scripts/eval-retrieval.ts and its unit test): before a run's scratch is removed, copy the run's decision records, run, work-item and attempt rows, steps, events and host transcript into an evidence directory under the plan's phase folder; everything copied passes the AC-5 redaction rules; nothing is copied from the owner's checkout beyond what the run itself produced; the copy is bounded (5 MB per run) and any truncation is recorded; unit tests for the copy on a block, on a success and for a seeded secret",
+      "the three blocked portfolio-6 T01 entries are moved aside, as the pilot's were, so they do not count",
+      "one diagnostic run of T01 arm B (run cap 0.40 USD) with the evidence capture on; the decision record, the denied calls' inputs, the hook and host denials and the transcript are read and the stop is classified with evidence"
+    ],
+    "thenRule": "a cause in the evaluation harness, an arm repository's setup, the read set the harness declares, a brief, or the judge/environment wiring is fixed offline (TDD, eval-retrieval tests, unit suite, typecheck, check:boundaries) and portfolio-6 (T01 to T06, arms A B C, --merge, the portfolio --node-modules) resumes with the same stop conditions (9 or more of 18 budget_exhausted / no branch / judging error; an unexpected stop shared by every arm; caps not fitting). A cause in AVARICE product code under src/ (for example how a unit with no change and some denials is ended), haiku behaviour that only a product or routing change can address, or a design decision stops the plan with a classification and fix options, with no change under src/ and no further spend",
+    "caps": { "planTotalUsd": 33.0, "guardEnv": "AVARICE_PHASE4_CEILING_USD", "guard": 36.93, "ceilingUsd": 40 }
+  },
+  "diagnostic": {
+    "run": "T01 arm B, --keep, --cap-usd 0.10, scratch /private/tmp/avarice-eval-diag (outside ~/.claude*: a first attempt with a scratch under ~/.claude-edu was refused by `avarice init` before any model call and cost nothing)",
+    "spendUsd": 0.08386034,
+    "result": "blocked_on_decision (decision), 0 tokens, 0.00 USD run cost, no branch; the arm's onboarding cost 0.0839 USD (earlier 0.0763)",
+    "decisionRecord": {
+      "class": "permission",
+      "urgency": "blocking",
+      "issue": "the required check typecheck wrote outside its declared paths (node_modules/.tmp/tsconfig.app.tsbuildinfo, node_modules/.tmp/tsconfig.node.tsbuildinfo, node_modules/.tmp/tsconfig.scripts.tsbuildinfo, node_modules/.tmp/tsconfig.test.tsbuildinfo) during validation, so it was not activated; the required check test wrote outside its declared paths (node_modules/.cache/imagetools/...) during validation, so it was not activated",
+      "gate": "checks:validate",
+      "events": "check.validated: typecheck rejected (unexpected-write), lint active, format:check active, test rejected (unexpected-write); decision.opened; run.transition contract_ready -> blocked_on_decision"
+    },
+    "mechanism": "Before any model call the run validates each required check once in a scratch clone at the pin, with the dependencies installed. It rejects a check that writes a path the check does not declare in its `writes`. The conventions file the harness derives for each arm repository declared no `writes`, but `tsc -b` writes node_modules/.tmp/*.tsbuildinfo and vitest writes node_modules/.cache/imagetools (and, found by running the four checks in a clone, node_modules/.vite, node_modules/.vite-temp and node_modules/.vitest-cache). Two required checks were therefore rejected and the run blocked on a permission decision. The same cause blocks every arm and every portfolio task.",
+    "classification": "harness defect (the arm repository setup, scripts/eval-retrieval.ts conventionsFor), not an AVARICE product defect and not a design decision: the product enforced its documented rule (a check declares what it writes) as designed, and `writes` is the conventions key meant for tool caches. Nothing under src/ changed.",
+    "fix": "conventionsFor declares node_modules/.tmp/**, .cache/**, .vite/**, .vite-temp/** and .vitest-cache/** as `writes` of every check of a repository whose parent has an npm lockfile, and nothing for another repository. RED commit a0c1989 (two failing tests), GREEN commit e76f7cc. test/unit/eval-retrieval.test.ts 37 of 37, unit suite 2866 of 2866, typecheck and check:boundaries clean.",
+    "offlineCheck": "the portfolio's four checks run in a clone of the kept repository with a copy of the owner's node_modules whose tool caches were removed: typecheck wrote node_modules/.tmp (4 files), test wrote node_modules/.cache/imagetools (14), node_modules/.vite/vitest and node_modules/.vitest-cache (76); lint and format:check wrote nothing. All are inside the declared globs. The clone and the kept scratch were removed afterwards; the owner's checkout and node_modules were only read.",
+    "notProvenOffline": "that no second pre-model gate follows the check validation: the first portfolio-6 run is the test, and a shared stop halts the plan"
+  },
+  "diagnostic2": {
+    "run": "T01 arm B, --task-ids T01 --arms B --cap-usd 0.40, --evidence-dir 04-36-evidence, --out 04-36-diagnostic2-results.json (a results file of its own, so it does not count toward portfolio-6); log ac8-diag2.log in the job's tmp directory",
+    "spendUsd": 0.20245659,
+    "spendDetail": "onboarding 0.07765968, run 0.12479692; run reported 1891606 tokens over 3 turns and 384 s",
+    "result": "blocked_on_decision (decision), no branch; item A of the run made the change and stopped on a question",
+    "evidenceDir": "04-36-evidence/diagnostic2-T01-B (renamed from T01-B after the run so the portfolio-6 runs take the plain <task>-<arm> names; 13 files, 1610006 bytes, nothing truncated; AC-5 pattern scan 0 hits)",
+    "decisionRecord": {
+      "decision": "dec_01M7VCCMHYW7B15HV0BWSZCX0Y",
+      "class": "acceptance",
+      "urgency": "blocking",
+      "options": "1: allow `npm run test:e2e` as an extra check and the unit adds the Playwright spec; 2: keep the four commands only and cover the case in the unit test alone",
+      "issue": "the unit-scope fix is in place and all four required checks passed, but the end-to-end coverage you asked for is not done: tests/e2e/motion.spec.ts was not created because the plan's e2e check is `npm run test:e2e`, which is not in the allowed command list",
+      "runTransition": "running -> blocked_on_decision, reason decision, class acceptance, signal verification-human-needed (run.transition event 253)"
+    },
+    "whatTheUnitDid": {
+      "changedFiles": ["src/anim/MotionFeatures.tsx", "tests/unit/motion-features.test.tsx (new)"],
+      "checks": "typecheck, lint, format:check and test all passed (316 tests)",
+      "workflow": "the GSD quick workflow: 4 subagents (gsd-planner, gsd-plan-checker, gsd-executor, gsd-verifier), 29 Reads, 5 Writes, 5 Bash, 2 Glob, 2 Grep; it wrote PLAN.md, SUMMARY.md and a VERIFICATION.md with `status: human_needed` under .planning/quick/",
+      "ledgerOutcome": "the invocation ended with outcome denied (1 hook denial, 0 host denials) and the item then went to verification, where the human_needed status of its VERIFICATION.md opened the acceptance decision"
+    },
+    "deniedCalls": [
+      { "call": "Bash `ls -d .planning/quick/*/` (the GSD quick workflow listing quick task directories)", "by": "the PreToolUse hook, rule shell-syntax (a glob in a Bash command)", "also": "listed in the permission_denials of a subagent's result (the invocation's own final result lists none)", "consequence": "the unit read the directory with the Glob tool instead and went on" },
+      { "call": "Read .claude/gsd-core/workflows/quick.md and CLAUDE.md in the clone", "by": "not denied: the files do not exist (tool error)", "consequence": "none" }
+    ],
+    "hookDenialsInTheArmsOnboarding": "map invocation 3 (shell-syntax, shell-not-allowed, shell-syntax) and intel invocation 2 (shell-syntax, shell-gsd-no-preamble): routine for the onboarding units, both ended progressed",
+    "classification": "the BRIEF (harness). The harness hands the unit the historical commit message as the brief; its second bullet, `Add unit and e2e coverage for the reduced-then-off case`, asks for an end-to-end spec that the harness neither runs nor judges (tests/e2e/motion.spec.ts is a denied read and a held-out artifact; `npm run test:e2e` is neither a required check nor an allowed command). The unit finished everything that can be checked, the verifier could not verify the e2e bullet and reported human_needed, and AVARICE ended the item on an acceptance decision as it is documented to (src/domain/outcome.ts: a human_needed verification pauses). Not an AVARICE product defect and not a design decision: the product did what it says on a brief that asks for unverifiable work. Not the read set, the arm repository setup or the judge wiring.",
+    "shared": "yes for the tasks: the briefs of T02 (`e2e drag, modifier and repeat cases`) and T05 (`e2e density cases at pixel ratio 1 and 3`) ask for e2e work too, and T03's held-out set names two e2e specs; T04 and T06 do not",
+    "notEstablished": "portfolio-6 arm C ended differently: a short invocation (6 turns, 12.5 s, no change) with 2 hook denials (shell-syntax on Bash, outside-read-set on Glob) and 2 host permission denials, decision class permission. Its transcript was lost with the scratch, so whether it is the same GSD quick start (`ls -d .planning/quick/*/` and a glob) with a haiku that gave up, or something else, is not established; this run (arm B, the same first denial) recovered from it. The evidence capture is now on for every run of the resumed portfolio-6, so a recurrence is diagnosable from the kept records at no extra cost.",
+    "fix": "briefFor (scripts/eval-retrieval.ts) keeps the commit message whole and adds one scope paragraph, identical for every task and arm: only the required checks (named from the task) can run in this environment; an end-to-end or browser test named above is out of scope: do not write it, do not ask whether to cover it and do not stop for it; make the change and its unit tests, run the required checks and finish. RED commit e6d3b5a, GREEN commit 12b5d19. test/unit/eval-retrieval.test.ts 45 of 45, unit suite 2874 of 2874, typecheck and check:boundaries clean. Nothing under src/ changed. The approved task list and its digest are untouched.",
+    "limit": "the offline test shows the brief carries the paragraph; it cannot show that a unit will no longer end on a question. The first resumed T01 runs are that test, and a stop shared by every arm halts the plan.",
+    "blockedPortfolio6T01Entries": "moved unchanged (git mv) from test/benchmark/phase4/eval-results.json to 04-36-portfolio6-t01-blocked-results.json, so they do not count; portfolio-6 restarts a fresh eval-results.json",
+    "spentAfter": { "planUsd": 2.5070546, "phase4Usd": 6.4337306, "ledgerLines": 52 }
+  },
+  "harnessChanges": {
+    "taskIdsSelector": "selectTasks: named approved tasks in the order given; an id off the approved list, a repeat or an empty list is refused (exit 3); not with --tasks (exit 64); approved digest unchanged and printed",
+    "merge": "--merge (needs --out): readResultsFile/skipRecorded keep recorded runs, skip their (task, arm) pairs, refuse a file of another approved list, a malformed one or a duplicate pair; a live start over a file that holds runs is refused without --merge; nothing to run exits 0 without a model; header gains taskIds and invocations",
+    "arm C onboarding cap": "ONBOARD_CAP_USD.C 0.90 to 1.10 (the owner's authorized change)",
+    "prettierIgnore (not in the ruling, a harness defect found before any spend)": "prepareArmWorkspace adds .avarice/ to .prettierignore in the setup commit of a repository that names prettier in package.json (creating the file when absent, leaving an existing ignore alone). Without it the harness's own .avarice/config.json failed `prettier --check .` at the setup commit, so format:check failed for every arm on the portfolio repository before the agent changed anything.",
+    "commits": ["a RED/GREEN pair for the three authorized changes", "a RED/GREEN pair for the prettier ignore"],
+    "tests": "test/unit/eval-retrieval.test.ts 35 of 35; unit suite 2862 of 2862 before the prettier fix; typecheck and check:boundaries clean; --dry-run --task-ids T01,T07,T16 prints 9 runs at 11.70 USD cap bound and the other six tasks 18 runs at 23.40 USD, nothing spent"
+  },
+  "offlineJudgeProbe": {
+    "what": "No model, no spend. Each balanced-9 task's PARENT (an arm that changed nothing) was put through the harness's own judging path (prepareArmWorkspace, prepareJudgeClone, judgeClone, SandboxedExecutor), the held-out test copied in from the target commit. Source repositories were only read.",
+    "noOpResults": {
+      "T01": "typecheck passed, lint passed, format:check passed (after the prettier fix), test failed, held-out failed",
+      "T04": "typecheck failed, lint passed, format:check passed, test failed, held-out failed",
+      "T06": "typecheck passed, lint passed, format:check passed, test failed, held-out failed",
+      "T07": "test failed, held-out failed",
+      "T10": "test failed, held-out failed",
+      "T13": "test failed, held-out failed",
+      "T16": "build passed, lint passed, test failed, held-out failed",
+      "T17": "build failed, lint passed, test failed, held-out failed",
+      "T20": "build passed, lint passed, test failed, held-out failed"
+    },
+    "freeSuccesses": "none: the held-out test fails at the parent for all 9 tasks, so no task succeeds without the agent's work",
+    "portfolio": "with the held-out test removed, `npm run test` at the T01 parent passes (14 files, 315 tests): portfolio tasks are judgeable. The judge needs --node-modules aa-phan-portfolio-v2=<checkout>/node_modules because the checkout's lockfile differs from each parent's (one extra dependency, lenis, at T01 and T04; 50 more packages and a different font package at T06).",
+    "auto_search_workflow (T07, T10, T13)": "the required check and the held-out command run `python3 -m unittest` under the PATH python3, /Library/Developer/CommandLineTools/usr/bin/python3 3.9.6, which has no `requests` and no `gspread`. In the sandboxed judge T07's held-out dies with `ModuleNotFoundError: No module named 'requests'` (boards.py line 19) in 0.5 s, whatever the agent did. The repository's own .venv holds the dependencies, but the harness has no way to use it. With the held-out file removed, the parent's suite outside the sandbox shows 1 failure and 5 errors (gspread, requests and a cross-process lock test). T10 and T13 use the same interpreter and suite; their held-out imports were not probed one by one.",
+    "GroceriesGPT (T16, T17, T20)": "vitest's globalSetup requires TEST_DATABASE_URL (a dedicated Postgres) and throws without it; the judge environment holds PATH, HOME, TMPDIR, CI and LANG only. T16's held-out command dies in globalSetup in 1.4 s, whatever the agent did, so the required `test` check and the held-out test cannot pass. T17 also fails `npm run build` at the parent because the held-out test file is compiled by tsc (a natural failure the agent's work would clear).",
+    "consequence": "On 6 of the 9 approved-for-evaluation tasks (T07, T10, T13, T16, T17, T20) success is impossible for every arm in this harness, independent of retrieval. Only the three portfolio tasks (T01, T04, T06) can succeed."
+  },
+  "pilot": {
+    "status": "stopped after T01 (3 of the authorized 9 pilot runs); T07 and T16 not run",
+    "command": "AVARICE_LIVE=1 AVARICE_PHASE4_CEILING_USD=36.93 node scripts/eval-retrieval.ts --live --task-ids T01 --node-modules aa-phan-portfolio-v2=<checkout>/node_modules --out test/benchmark/phase4/eval-results.json (log ac8-pilot.log in the job's tmp directory)",
+    "whyT01Only": "the offline probe, run before any spend, showed T07 and T16 cannot succeed in this harness; T01 is inside the authorized set, fits the cap (4.10 USD cap bound) and measures real setup and run cost on the repository where success is possible",
+    "runs": [
+      { "task": "T01", "arm": "A", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.15167162, "mapUsd": 0.07777076, "branch": "none: the run left no branch to judge", "success": false },
+      { "task": "T01", "arm": "B", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.07625149, "mapUsd": 0, "branch": "none: the run left no branch to judge", "success": false },
+      { "task": "T01", "arm": "C", "state": "blocked_on_decision (decision)", "tokens": 0, "runCostUsd": 0, "setupUsd": 0.65742112, "mapUsd": 0, "branch": "none: the run left no branch to judge", "success": false }
+    ],
+    "measuredFastOnboardingUsd": { "armA map generation (parent without a map)": 0.07777, "armA onboarding": 0.0739, "armB onboarding": 0.07625, "armC onboarding with the knowledge pass (portfolio)": 0.65742 },
+    "measuredRunCostUsd": "not measured: no run reached a model invocation (0 tokens, 0.00 USD each)",
+    "spentByThisPlanUsd": 0.88534423,
+    "phase4SpentUsd": 4.812019,
+    "phase4RemainingUsd": 35.187981,
+    "stopConditionHit": "3 of 3 pilot runs left no branch to judge (the owner's condition is 6 of 9); the rest of the pilot cannot change the result because the cause is shared by every arm and the other two repositories cannot pass at all"
+  },
+  "portfolio6": {
+    "command": "AVARICE_LIVE=1 AVARICE_PHASE4_CEILING_USD=36.93 node scripts/eval-retrieval.ts --live --merge --task-ids T01,T02,T03,T04,T05,T06 --node-modules aa-phan-portfolio-v2=<owner's checkout>/node_modules --out test/benchmark/phase4/eval-results.json (log ac8-p6.log in the job's tmp directory)",
+    "capBound": "24.60 USD for the 18 runs (runs 7.20 + onboarding 13.80 + arm A map generation 3.60); the owner's ruling said about 23.40, the difference is the six arm A map generations; 24.60 fits the plan total (33.00 minus 0.97 spent) and the guard 36.93",
+    "resultsFile": "test/benchmark/phase4/eval-results.json started fresh; the three blocked pilot runs were moved unchanged to 04-36-pilot-results.json (git mv), so the superseded T01 entries are not in the verdict file",
+    "ran": "T01 A, T01 B, T01 C (3 of 18 runs); the process was stopped after T01 C, before any T02 model step",
+    "runs": [
+      { "task": "T01", "arm": "A", "state": "blocked_on_decision (decision)", "tokens": 3907787, "runCostUsd": 0.22764552, "setupUsd": 0.12994362, "branch": "none", "success": false },
+      { "task": "T01", "arm": "B", "state": "blocked_on_decision (decision)", "tokens": 4812210, "runCostUsd": 0.26532667, "setupUsd": 0.06950936, "branch": "none", "success": false },
+      { "task": "T01", "arm": "C", "state": "blocked_on_decision (decision)", "tokens": 210327, "runCostUsd": 0.00675484, "setupUsd": 0.63621389, "branch": "none", "success": false }
+    ],
+    "progress": "the fix of the first block worked: in arm C all four required checks validated active, the baseline passed (typecheck, lint, format:check, test), gate G0 passed and the run reached its model (haiku, because the task size is small)",
+    "secondBlock": {
+      "armCEvidence": "run_01M7TJAAB2994AVANMNWNK4EV6: one invocation of 6 turns and 12.5 s (0.0068 USD, 210327 tokens) ended with outcome denied: permissionDenials 2, hookDenies 2 (hook rules shell-syntax on a Bash call and outside-read-set on a Glob call), headMoved false. The run then opened a permission decision on item A: 'the unit made no in-scope change; the host or the hook denied 4 call(s)'. No decision option but withdraw.",
+      "armsAandBEvidence": "not captured. Their blocks came after 3.9M and 4.8M tokens (about 0.23 and 0.27 USD, many more turns than C), so they are not the same short denial; their decision records were in scratch ledgers the harness removed (no --keep) and the snapshot poller that was started to catch them missed arms A and B (it caught arm C only)",
+      "classification": "not established. Candidates: (1) model behaviour on the routine policy's tool surface: a haiku unit that tries a compound shell command or a glob outside the read set, is denied and stops without a change; (2) a harness or brief defect: the brief or the read set the harness gives a unit makes the portfolio's files or checks unreachable (a read-set or shell rule that the arm repository's conventions should allow); (3) an AVARICE product defect in how a denied call ends a unit (an item that is denied twice is blocked on the owner instead of retried or resumed). Nothing here separates them: the tool inputs of the denied calls are in the invocation transcript, which was removed with the scratch.",
+      "shared": "yes: all three arms of the only task run ended the same way, so it is not a retrieval effect, and T02 to T06 on the same repository would be expected to end the same way"
+    },
+    "stoppedBy": "owner rule: stop and return on any unexpected stop shared by every arm; classification and any product fix need the owner",
+    "spend": { "planUsd": 2.304598, "phase4Usd": 6.231274, "ledgerLines": 50, "remainingOfPlanCapUsd": 30.695402, "remainingOfCeilingUsd": 33.768726, "note": "portfolio-6 runs cost 1.3354 USD (T01 A map 0.0539 + A onboard 0.0761 + A run 0.2276, B onboard 0.0695 + run 0.2653, C onboard 0.6362 + run 0.0068); the diagnostic 0.0839; the pilot 0.8853" },
+    "proposedNextStep": "one more diagnostic run with --keep (arm B, run cap 0.40, about 0.40 USD) to read the transcript's denied tool inputs and the decision records of a long arm, or the owner's decision on the classification; then either a harness fix (offline, with a unit test) or a product decision (D-04 classification), after which portfolio-6 resumes with --merge over the three recorded T01 runs removed or kept as the owner decides"
+  },
+  "rest": { "ran": false, "why": "the pilot stopped; nothing was spent on T04, T06, T10, T13, T17 or T20" },
+  "unexpectedStop": {
+    "what": "every T01 run (A, B, C) ended blocked_on_decision with reason decision, 0 tokens and 0.00 USD, and no branch",
+    "evidence": "blocked_on_decision with reason decision is an item-local block (src/app/run-stages/blocked.ts blockItem); the run id was issued, the run reached its item stage, and no invocation.finished event carried tokens or cost. The scratch directories of the three runs were removed by the harness (--keep not set), so the decision record itself was not read.",
+    "classification": "not established. Candidates: a product defect in how a run starts on the arm repositories; a harness defect in the arm repository or the brief (the brief is the commit message with one acceptance criterion naming the four required checks); an environment defect in the run's own required checks (the run's checks are the same npm scripts, with `npm ci` as the dependency install). The cause is shared by arms A, B and C, so it is not a retrieval effect.",
+    "diagnosticNotRun": "a single `--keep` run of T01 arm B would cost about 0.08 USD (the arm B onboarding, measured 0.076 USD; the blocked run itself cost nothing) and would show the decision record. It was not run: the permission system denied the command as a spend outside the owner's authorization, and no workaround was attempted. It needs the owner's say.",
+    "proposedD04Classification": "unclassified pending the diagnostic; the two environment defects above (Python dependencies, Postgres) are task/harness defects, classified from evidence",
+    "supersededBy": "diagnostic2 (the cause of the arm B stop is the brief) and the resumed portfolio6Resumed run"
+  },
+  "portfolio6Resumed": {
+    "command": "AVARICE_LIVE=1 AVARICE_PHASE4_CEILING_USD=36.93 node scripts/eval-retrieval.ts --live --merge --task-ids T01,T02,T03,T04,T05,T06 --node-modules aa-phan-portfolio-v2=<owner's checkout>/node_modules --evidence-dir 04-36-evidence --out test/benchmark/phase4/eval-results.json (log ac8-p6b.log in the job's tmp directory); a fresh eval-results.json, the three blocked T01 entries of the first portfolio-6 attempt kept apart in 04-36-portfolio6-t01-blocked-results.json",
+    "ran": "18 of 18 runs, no stop, no ceiling stop, no judging error",
+    "capBound": "24.60 USD; measured 9.5822 USD (run cost 2.7597, setup 6.8225 of which arm C onboarding 4.9755)",
+    "stopConditionsChecked": {
+      "nineOrMoreOf18WithoutABranchOrJudgingError": "6 of 18 left no branch (T01 C, T02 A, T02 B, T03 A, T04 A, T05 C); 0 budget_exhausted; 0 judging errors; below 9",
+      "unexpectedStopSharedByEveryArm": "none: no task ended without a branch in all three arms (T02 lost A and B, C succeeded)",
+      "capsNotFitting": "none"
+    },
+    "perTaskByArm": {
+      "T01": { "A": "success", "B": "success", "C": "no branch: acceptance decision, verifier human_needed (two behaviours reviewed in code but not covered by a test)" },
+      "T02": { "A": "no branch: acceptance decision, verifier human_needed (its only stated reason: .planning/config.json modified at session start)", "B": "no branch: repeated_failure, loop limit of 3 consecutive hook denials (the verifier subagent's `git -C <clone> diff|status|show` calls, rule shell-not-allowed, then ListAgents and SendMessage, rule unknown-tool)", "C": "success" },
+      "T03": { "A": "no branch: acceptance decision, gate G2 (VERIFICATION gaps_found: format:check failing on Sleeve.tsx, which the unit could not fix with only the four named commands)", "B": "success", "C": "success" },
+      "T04": { "A": "no branch: acceptance decision, verifier human_needed (could not run the other gates; .planning/config.json noted as modified)", "B": "success", "C": "success" },
+      "T05": { "A": "success", "B": "success", "C": "no branch: acceptance decision, verifier human_needed (.planning/config.json noted as modified)" },
+      "T06": { "A": "branch judged no success (test and held-out test failed in the judging clone)", "B": "branch judged no success (test and held-out test failed in the judging clone)", "C": "success" }
+    },
+    "runs": [
+      { "task": "T01", "arm": "A", "success": true, "state": "ready_for_review", "tokens": 2486811, "runCostUsd": 0.1143, "setupUsd": 0.1744 },
+      { "task": "T01", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3129909, "runCostUsd": 0.1185, "setupUsd": 0.0830 },
+      { "task": "T01", "arm": "C", "success": false, "state": "blocked_on_decision", "tokens": 3611629, "runCostUsd": 0.2084, "setupUsd": 0.6013 },
+      { "task": "T02", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 2561571, "runCostUsd": 0.1681, "setupUsd": 0.1950 },
+      { "task": "T02", "arm": "B", "success": false, "state": "blocked_on_decision", "tokens": 3040412, "runCostUsd": 0.2133, "setupUsd": 0.2619 },
+      { "task": "T02", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2372642, "runCostUsd": 0.1228, "setupUsd": 1.1000 },
+      { "task": "T03", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 4746460, "runCostUsd": 0.2814, "setupUsd": 0.2596 },
+      { "task": "T03", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 2877492, "runCostUsd": 0.1440, "setupUsd": 0.1309 },
+      { "task": "T03", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 3210746, "runCostUsd": 0.1131, "setupUsd": 0.7484 },
+      { "task": "T04", "arm": "A", "success": false, "state": "blocked_on_decision", "tokens": 3324764, "runCostUsd": 0.1966, "setupUsd": 0.1529 },
+      { "task": "T04", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3399716, "runCostUsd": 0.1262, "setupUsd": 0.0797 },
+      { "task": "T04", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2382964, "runCostUsd": 0.1574, "setupUsd": 1.1000 },
+      { "task": "T05", "arm": "A", "success": true, "state": "ready_for_review", "tokens": 3993902, "runCostUsd": 0.1824, "setupUsd": 0.1603 },
+      { "task": "T05", "arm": "B", "success": true, "state": "ready_for_review", "tokens": 3669406, "runCostUsd": 0.1292, "setupUsd": 0.0915 },
+      { "task": "T05", "arm": "C", "success": false, "state": "blocked_on_decision", "tokens": 3434768, "runCostUsd": 0.1542, "setupUsd": 0.7066 },
+      { "task": "T06", "arm": "A", "success": false, "state": "ready_for_review", "tokens": 2720412, "runCostUsd": 0.1164, "setupUsd": 0.2003 },
+      { "task": "T06", "arm": "B", "success": false, "state": "ready_for_review", "tokens": 2598959, "runCostUsd": 0.1030, "setupUsd": 0.0573 },
+      { "task": "T06", "arm": "C", "success": true, "state": "ready_for_review", "tokens": 2545102, "runCostUsd": 0.1104, "setupUsd": 0.7192 }
+    ],
+    "perArm": {
+      "A": { "runs": 6, "success": 2, "tokens": 19833920, "runCostUsd": 1.0592, "meanRunCostUsd": 0.1765, "setupUsd": 1.1427, "meanSetupUsd": 0.1904, "noBranch": 3, "judgeErrors": 0 },
+      "B": { "runs": 6, "success": 4, "tokens": 18715894, "runCostUsd": 0.8342, "meanRunCostUsd": 0.1390, "setupUsd": 0.7042, "meanSetupUsd": 0.1174, "noBranch": 1, "judgeErrors": 0 },
+      "C": { "runs": 6, "success": 4, "tokens": 17557851, "runCostUsd": 0.8663, "meanRunCostUsd": 0.1444, "setupUsd": 4.9755, "meanSetupUsd": 0.8293, "noBranch": 2, "judgeErrors": 0 }
+    },
+    "measuredMeanRunCostUsd": { "A": 0.1765, "B": 0.1390, "C": 0.1444, "note": "run cost only; the mean cost of a run including its arm's onboarding (and arm A's map generation) is A 0.3669, B 0.2564, C 0.9737 USD" },
+    "evidence": "04-36-evidence/<task>-<arm> for the 18 runs and diagnostic2-T01-B; 19 directories, none truncated (largest run 4.1 MB of the 5 MB cap); AC-5: a findSecrets scan of every evidence file (278 files, 46.8 MB) found 0 hits and test/integration/redaction-suite.test.ts passes 5 of 5. The transcripts carry the repository text the runs read (the portfolio's own source), which the AC-5 secret rules do not address."
+  },
+  "verdict": {
+    "pass": false,
+    "via": null,
+    "reason": "no pack arm both matches the success of A and stays within half of its tokens",
+    "rule": "AC-8 over the 6 portfolio tasks (ruling 2, accepted in writing 2026-11-19T17:48:42Z): arm B or C succeeds at least as often as A at no more than 50% of A's tokens",
+    "arms": {
+      "A": { "success": "2 of 6", "tokens": 19833920 },
+      "B": { "success": "4 of 6", "successOk": true, "tokens": 18715894, "tokenShare": 0.9436306085735952, "tokensOk": false },
+      "C": { "success": "4 of 6", "successOk": true, "tokens": 17557851, "tokenShare": 0.8852436129620368, "tokensOk": false }
+    },
+    "reading": "B and C succeed twice as often as A on these 6 tasks but use 94% and 89% of A's tokens, far above the 50% bound, so AC-8 fails on the token half. A's success rate is depressed by 3 verifier or gate stops that left no branch.",
+    "weakerBecause": "6 tasks on one repository; one task is 17% of a rate; a no-branch stop (6 of 18 runs) is counted as a non-success whatever its cause; tokens are the totals the host reported for each run's own invocations (setup not included)"
+  },
+  "knowledgeRule": {
+    "outcome": "on",
+    "reason": "arm C does not cost more tokens than B",
+    "rule": "D-08: the knowledge pass stays on unless arm C shows no success gain over arm B and also costs more tokens than arm B",
+    "measured": "C 4 of 6, B 4 of 6 (no success gain); C 17557851 tokens against B 18715894 (C costs fewer tokens), so the rule does not say off",
+    "defaultChanged": false,
+    "note": "the default of adapters.knowledgePass is unchanged (true); arm C's onboarding costs 0.8293 USD a run on average against 0.1174 for B, which is not part of the D-08 rule as the owner worded it"
+  },
+  "ownerSpotCheck": {
+    "runs": [
+      { "task": "T01", "arm": "B", "runId": "run_01M7VE1FD4W0XB8JVCV66Z00GK", "evidence": "04-36-evidence/T01-B" },
+      { "task": "T04", "arm": "C", "runId": "run_01M7VR7YZ4QR908ENT6WPN0JG8", "evidence": "04-36-evidence/T04-C" },
+      { "task": "T05", "arm": "A", "runId": "run_01M7VS76KK7S2AGASBZ4W1JX5M", "evidence": "04-36-evidence/T05-A" }
+    ],
+    "pickedBy": "a random draw (node:crypto randomInt) of 3 of the 10 successful runs",
+    "result": "pending: the owner's human check (does the diff match the accepted change in intent); it does not change the verdict (D-07). The run branches live in the scratch repositories the harness removed, so the diff is read from the kept transcript (the unit's written changes) and the judge's pass of the held-out test."
+  },
+  "spend": { "planUsd": 12.089225, "phase4Usd": 16.015900, "ledgerLines": 94, "planCapUsd": 33.0, "guardUsd": 36.93, "ceilingUsd": 40, "diagnostic2Usd": 0.202457, "portfolio6ResumedUsd": 9.5822 }
+}

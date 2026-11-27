@@ -6,6 +6,7 @@
 import type { Result } from '../domain/result.ts';
 import type { BlockedReason, OnboardingState } from '../domain/onboarding-lifecycle.ts';
 import type { RunBlockedReason, RunState, WorkItemState } from '../domain/run-lifecycle.ts';
+import type { ExternalRef, Freshness } from './context-source.ts';
 
 export interface ProjectRow {
   projectId: string;
@@ -116,6 +117,15 @@ export interface BudgetCharge {
   amount: number;
   fromReserved: boolean;
 }
+
+// One amount of Ledger.spendBudgets.
+export interface BudgetSpend {
+  name: string;
+  amount: number;
+}
+
+// `spent` is false when a row had no room: `budget` names the first such row, and nothing was spent.
+export type BudgetSpendResult = { spent: true; rows: BudgetRow[] } | { spent: false; budget: string };
 
 export interface BudgetReservation {
   // False when `used + reserved + amount` would pass the limit; nothing was reserved then.
@@ -230,6 +240,68 @@ export interface EventInput {
 export interface EventReceipt {
   seq: number;
   rowHash: string;
+  // Set, with seq 0 and an empty hash, when the event was a debug event refused because the events table is at its bound (plan 04-30; OPS-5). Nothing was written.
+  dropped?: true;
+}
+
+// A granted approval (plan 04-16; FR-12, ADR-005). `scope` is the run ID, the onboarding ID, or `attended:<session id>`: it is stored in the
+// `run_id` column of the approvals table. A row is never deleted and only `consumedAt` and `revokedAt` ever change, each once.
+export interface ApprovalRow {
+  approvalId: string;
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  idempotencyKey: string;
+  source: string;
+  grantedBy: string;
+  grantedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface GrantApprovalInput {
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  // `owner:<os user>`.
+  grantedBy: string;
+  // The `apr_` request this approval answers. A request is granted once.
+  requestId?: string;
+  nowMs: number;
+}
+
+// The `approval.requested` event as a record: what the owner is shown by `avarice approve <apr id>`.
+export interface ApprovalRequestRow {
+  requestId: string;
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  // A bounded, redacted `key=value` summary of the parameters, never the parameters themselves.
+  paramsSummary: string;
+  requestedAt: string;
+}
+
+export interface ConsumeApprovalInput {
+  scope: string;
+  action: string;
+  paramsDigest: string;
+  nowMs: number;
+  // The `action.started` event written in the same transaction as the consume; the ledger adds `approvalId` to its data.
+  startEvent: { type: string; level?: 'debug' | 'info' | 'warn' | 'error'; runId?: string; data: Readonly<Record<string, unknown>> };
+}
+
+export interface ConsumedApproval {
+  approvalId: string;
+  // The `seq` of the start event.
+  startSeq: number;
+}
+
+// One `action.started`, `action.finished` or `action.interrupted` event of a scope, oldest first.
+export interface ActionEventRow {
+  seq: number;
+  type: string;
+  data: Readonly<Record<string, unknown>>;
 }
 
 // One row of the event log as the interactive shell's watch view reads it (plan 02-19; ADR-013 decision 4): the type and the small
@@ -283,6 +355,30 @@ export interface RunRow {
   leaseFence: number;
   // When the owner asked to cancel the run and the supervisor has not finished it yet (AUT-12); null otherwise.
   cancelRequestedAt: string | null;
+}
+
+// Everything `status` reads about one run, as the nine per-run list methods return it (same rows, same order), plus the run's attempts.
+export interface RunStatusInputs {
+  checkpoints: RunCheckpointRow[];
+  evidence: EvidenceRow[];
+  gateResults: GateResultRow[];
+  decisions: DecisionRow[];
+  workItems: WorkItemRow[];
+  notifications: NotificationRow[];
+  budgets: BudgetRow[];
+  // The highest contract version, or null.
+  contract: ContractRow | null;
+  steps: RunStepRow[];
+  attempts: AttemptRow[];
+  // The references the run recorded (plan 04-20), in primary-key order, as `listTaskRefs` returns them.
+  taskRefs: ExternalRef[];
+}
+
+// The primary key of a task reference within a run: the provider, the kind and the provider's own ID, verbatim.
+export interface TaskRefKey {
+  provider: string;
+  kind: string;
+  id: string;
 }
 
 export interface NewRun {
@@ -714,6 +810,9 @@ export interface Ledger {
   // Every charge, and the event when one is given, in one transaction, so a kill or a failure leaves all of them written or none. Each charge
   // follows chargeBudget's rules. Returns the run's budget rows afterwards.
   settleBudgets(runId: string, charges: readonly BudgetCharge[], event?: EventInput): Result<BudgetRow[]>;
+  // Spends every amount in one transaction, or none of them (plan 04-28; CON-11): each is added to `used` only while `used + reserved + amount` stays within that row's limit,
+  // and when any one does not fit nothing is spent and the row that stopped it is named. It is how a shared counter stays exact when several processes spend at once.
+  spendBudgets(runId: string, spends: readonly BudgetSpend[]): Result<BudgetSpendResult>;
   getBudgets(runId: string): Result<BudgetRow[]>;
   // How many hook denials with rule `budget_exhausted` the invocation recorded.
   countBudgetDenials(runId: string, invocationId: string): Result<number>;
@@ -724,6 +823,33 @@ export interface Ledger {
   findLoopLimit(invocationId: string): Result<{ reason: string; count: number; limit: number } | null>;
 
   appendEvent(input: EventInput): Result<EventReceipt>;
+
+  // Approvals (plan 04-16; FR-12, FR-15, ADR-005). The table holds granted approvals only: a request is the `approval.requested` event.
+  // grantApproval inserts one row expiring APPROVAL_TTL_MS after `nowMs` (source `local-user`) and appends `approval.granted`; its idempotency
+  // key counts the earlier rows of the same scope, action and digest, so a fresh approval after expiry inserts. A request already granted is a
+  // `conflict`. revokeApproval sets `revoked_at` once (a revoked or consumed row is a `conflict`, an unknown ID `not_found`) and appends
+  // `approval.revoked`. consumeApprovalAndStart, in one BEGIN IMMEDIATE transaction, takes the oldest usable approval of the scope, action and
+  // digest (unexpired, unrevoked, unconsumed), sets `consumed_at` and appends the start event; null when none is usable, with nothing written.
+  grantApproval(input: GrantApprovalInput): Result<ApprovalRow>;
+  revokeApproval(approvalId: string, nowMs: number): Result<ApprovalRow>;
+  consumeApprovalAndStart(input: ConsumeApprovalInput): Result<ConsumedApproval | null>;
+  // Oldest first.
+  listApprovals(scope: string): Result<ApprovalRow[]>;
+  // The `approval.requested` event with this request ID, or null.
+  findApprovalRequest(requestId: string): Result<ApprovalRequestRow | null>;
+  // The latest request for the scope, action and digest that no approval answered yet, or null: a denied retry reuses it instead of asking again.
+  findPendingApprovalRequest(query: { scope: string; action: string; paramsDigest: string }): Result<ApprovalRequestRow | null>;
+  // The `action.*` events of a scope, oldest first (the no-replay rule reads them).
+  listActionEvents(scope: string): Result<ActionEventRow[]>;
+
+  // Task references (plan 04-20; FR-3, FR-8, FR-18): what a run was built from. recordTaskRefs writes each reference in one transaction, replacing the row with the
+  // same primary key (run, provider, kind, ID); two providers with the same ID are two rows. listTaskRefs returns them in primary-key order (provider, kind, ID),
+  // the order a resume refreshes them in. updateTaskRefFreshness sets the freshness and the retrieval time of one row and, when `revision` is given, its revision;
+  // an unknown row is `not_found`. The revision of a changed or deleted reference is never overwritten by the caller, so the next resume finds the change again.
+  recordTaskRefs(runId: string, refs: readonly ExternalRef[]): Result<void>;
+  listTaskRefs(runId: string): Result<ExternalRef[]>;
+  updateTaskRefFreshness(runId: string, key: TaskRefKey, freshness: Freshness, revision: string | undefined, nowMs: number): Result<void>;
+
   // The latest `limit` events recorded with the run's ID, oldest first. Read-only: the interactive shell polls this about once a second.
   listRunEvents(runId: string, limit: number): Result<RunEventRow[]>;
   recordArtifact(input: ArtifactInput): Result<void>;
@@ -740,6 +866,11 @@ export interface Ledger {
   transitionRun(runId: string, guard: TransitionGuard, t: RunTransitionInput): Result<RunRow>;
   // Oldest first, without Phase 1 onboarding carrier rows. Without a project ID, every run.
   listRuns(projectId?: string): Result<RunRow[]>;
+
+  // Every per-run table `status` reads, for all the named runs, in one batch (OPS-5, AC-2): one query per table for each chunk of at most
+  // 500 IDs, so the number of statements does not grow with the number of runs. Each run's lists hold the rows and the order the per-run
+  // read methods return. Read-only. An ID that is not a run (or is an onboarding carrier) is `not_found`, as it is for those methods.
+  loadRunStatusInputs(runIds: readonly string[]): Result<Map<string, RunStatusInputs>>;
 
   // Run leases mirror the onboarding leases: one UPDATE takes a free or strictly expired lease and bumps the fence;
   // renewal and release check holder and fence.
@@ -789,6 +920,9 @@ export interface Ledger {
   // Decisions open in state `open`. answerDecision, reopenStaleDecision and withdrawDecision each move an open decision in one
   // transaction under the run lock and refuse with `conflict` when it is no longer open.
   openDecision(input: DecisionInput): Result<DecisionRow>;
+  // A decision of an onboarding (plan 04-21): the row is keyed by the run the onboarding's contract is stored under, on that contract's latest version.
+  // That run is a carrier no run method can see, so the decision is listed by `listDecisions({ runId: <the carrier> })` and does not reach the inbox.
+  openOnboardingDecision(onboardingId: string, input: Omit<DecisionInput, 'runId' | 'contractVersion'>): Result<DecisionRow>;
   // open -> answered, and every affected item that no other open decision blocks goes blocked_on_decision -> ready. Refused with
   // `conflict` when the run's latest contract version is not expectContractVersion.
   answerDecision(input: AnswerDecisionInput): Result<DecisionRow>;

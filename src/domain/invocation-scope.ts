@@ -8,6 +8,7 @@
 // later at unlisted locations are caught by the staging diff gate, not prevented.
 import { isRefusedAgentCommand, programWords } from './conventions.ts';
 import { matchesAny } from './glob.ts';
+import { readScopePaths } from './mapping.ts';
 import { normalizedAbsoluteRoot, trimTrailingSlashes } from './normalized-root.ts';
 import type { OnboardingContract } from './onboarding-contract.ts';
 import { ROUTINE_PRESET } from './run-contract.ts';
@@ -202,6 +203,9 @@ export interface InvocationScope {
   readBeforeEdit?: boolean;
   // Run purpose only (plan 02-11): the contract's loop limits (CON-14), which the hook turns into a stop for escalation.
   escalation?: { consecutiveDenials: number; consecutiveSearches: number };
+  // Run purpose only (plan 04-29; CON-10, CON-11): the contract's retrieval limits for the agent's own searches, which the hook charges to the run's
+  // `retrieval.searches` row. Absent when the contract holds no `budgets.retrieval` (one compiled before plan 04-28) and for the onboarding purposes.
+  retrieval?: { searches: number; broadDiscovery: boolean };
   denyWrite: string[];
   denyRead: string[];
   // Repository-relative globs (secret-bearing files) the agent must not read inside staging.
@@ -235,6 +239,9 @@ export interface ScopeInput {
   // root or '/' would deny every read, including the read roots, and a relative or non-normalized root would match no canonical
   // path, so the deny would not apply. Either one throws a TypeError that names the field. Trailing slashes are trimmed.
   workRoot: string;
+  // The data root, work root and config home of every other known profile, and this profile's config home (SEC-1, D-19), denied beside the
+  // work root. Required, so no caller can leave another profile's moved roots readable.
+  profileRoots: readonly string[];
   workspace: WorkspaceShape;
   // Directories outside staging the invocation may read: the gsd-core directory, the agents directory and the
   // realpath of each allowed skill.
@@ -246,6 +253,9 @@ export interface ScopeInput {
   // subagent per 20 documents.
   subagentsTotal?: number;
 }
+
+// The read glob that names the map directory in a path-scoped contract read scope (`apps/api/**` plus this).
+export const PLANNING_READ_GLOB = '.planning/**';
 
 const writeDirOf = (purpose: InvocationPurpose): string => INVOCATION_PURPOSES[purpose].writeDir;
 const join = (base: string, rel: string): string => `${base}/${rel}`;
@@ -289,10 +299,18 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
   const repo = trimTrailingSlashes(input.repoPath);
   const dataRoot = trimTrailingSlashes(input.dataRoot);
   // The work root goes last so the existing entries keep their order; the Set lists a work root equal to another entry once.
-  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot])];
+  // The roots of the other profiles come after the work root, so every earlier entry keeps its place (SEC-1, D-19).
+  const profileRoots = input.profileRoots.map((root) => normalizedAbsoluteRoot(root, 'computeInvocationScope: profileRoots'));
+  const denyRead = [...new Set([repo, dataRoot, ...credentialPaths(home), workRoot, ...profileRoots])];
   // Only the invocation's own staging path is re-allowed beneath the work root: not the onboarding directory above it, and not a sibling
   // whose ID shares a prefix (the path is compared whole, as a root, by the hook and by the sandbox).
   const allowRead = [...workspace.repoReadAllow.map(trimTrailingSlashes), staging];
+
+  // Only the map purpose reads the repository's code; the others read what the map and the indexes hold. `.planning/**` is the map's own directory, always
+  // readable to the mapper, so it is no part of the question whether the contract read scope is narrower than the repository.
+  const repoReadGlobs = contract.files.read.filter((glob) => glob !== PLANNING_READ_GLOB);
+  const narrowedDirs = purpose === 'map' && repoReadGlobs.length > 0 ? readScopePaths(repoReadGlobs) : null;
+  const narrowedRead = narrowedDirs === null ? null : [...narrowedDirs, '.planning'];
 
   const subagents =
     purpose === 'intel' || purpose === 'knowledge'
@@ -315,6 +333,9 @@ export function computeInvocationScope(input: ScopeInput): InvocationScope {
     allowRead,
     // The knowledge pass reads its corpus and nothing else: no GSD directory, no skill directory, no other staging path.
     ...(readDir !== undefined ? { readConfine: [join(staging, readDir)] } : {}),
+    // A path-scoped map (a refresh of one area, ONB-11) reads the directories of its contract read scope and the GSD directories it needs, nothing else
+    // of the staging tree (T-04-35). A contract that reads the whole repository confines nothing.
+    ...(readDir === undefined && narrowedRead !== null ? { readConfine: [...narrowedRead.map((dir) => join(staging, dir)), ...input.readRoots.map(trimTrailingSlashes)] } : {}),
     readRoots: purpose === 'knowledge' ? [] : input.readRoots.map(trimTrailingSlashes),
     commands: {
       // No shell for the knowledge pass, whatever strategy is asked for.
@@ -346,7 +367,7 @@ export interface RunScopeInput {
   contract: {
     files: Pick<RunContract['files'], 'write' | 'create' | 'artifacts' | 'protected' | 'secretGlobs'>;
     execution: Pick<RunContract['execution'], 'commands'>;
-    budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent'>;
+    budgets: Pick<RunContract['budgets'], 'subagentsTotal' | 'subagentsConcurrent' | 'retrieval'>;
     // The loop limits of the contract (CON-14); a contract stored before consecutiveSearches existed leaves the search limit at its preset value.
     escalation?: Partial<Pick<RunContract['escalation'], 'consecutiveDenials' | 'consecutiveSearches'>>;
   };
@@ -356,6 +377,8 @@ export interface RunScopeInput {
   dataRoot: string;
   home: string;
   workRoot: string;
+  // As ScopeInput.profileRoots.
+  profileRoots: readonly string[];
   // `{workRoot}/{runId}/scratch`: writable and readable beside the clone; TMPDIR and the npm cache live under it.
   scratchDir: string;
   workspace: RunWorkspaceShape;
@@ -376,8 +399,8 @@ const uniqueInOrder = (items: Iterable<string>): string[] => [...new Set(items)]
 // The default parents of every AVARICE profile's roots (profile-paths.ts): all default data roots, the config home and all default work
 // roots (which hold other profiles' run clones). A run may read none of them; its own clone and scratch, which lie under the work parent,
 // are re-allowed one by one (plan 02-20: a declared command could read another profile's data root). A profile whose roots were placed
-// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is not covered (docs/containment.md). `home` is the
-// symlink-resolved home the credential directories already use.
+// elsewhere through AVARICE_DATA_ROOT, AVARICE_WORK_ROOT or AVARICE_CONFIG_HOME is covered by the profile roots a scope is given (profileRoots,
+// read from the profile configs by knownProfileRoots). `home` is the symlink-resolved home the credential directories already use.
 export function defaultAvariceParents(home: string): string[] {
   const root = trimTrailingSlashes(home);
   return [join(root, '.local/share/avarice'), join(root, '.config/avarice'), join(root, '.local/share/avarice-work')];
@@ -470,6 +493,7 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
   // The same refusal as Phase 1 (WR-01), for every root this function turns into a rule: a relative or non-normalized root would match
   // no canonical path, so the rule would not apply.
   const workRoot = normalizedAbsoluteRoot(input.workRoot, 'computeRunScope: workRoot');
+  const profileRoots = input.profileRoots.map((root) => normalizedAbsoluteRoot(root, 'computeRunScope: profileRoots'));
   const clone = normalizedAbsoluteRoot(input.clonePath, 'computeRunScope: clonePath');
   const scratch = normalizedAbsoluteRoot(input.scratchDir, 'computeRunScope: scratchDir');
   const { contract, workspace } = input;
@@ -539,10 +563,11 @@ export function computeRunScope(input: RunScopeInput): InvocationScope {
       consecutiveDenials: contract.escalation?.consecutiveDenials ?? ROUTINE_PRESET.escalation.consecutiveDenials,
       consecutiveSearches: contract.escalation?.consecutiveSearches ?? ROUTINE_PRESET.escalation.consecutiveSearches,
     },
+    ...(contract.budgets.retrieval !== undefined ? { retrieval: { searches: contract.budgets.retrieval.searches, broadDiscovery: contract.budgets.retrieval.broadDiscovery } } : {}),
     denyWrite: uniqueSorted(deny),
     // The own clone and scratch are the only places under the work root the run may read: another run's clone, whose ID may share a
     // prefix with this one, is compared whole by the hook and the sandbox and stays denied.
-    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home)]),
+    denyRead: uniqueInOrder([repo, dataRoot, ...credentialDirs, workRoot, ...defaultAvariceParents(home), ...profileRoots]),
     denyReadGlobs: [...contract.files.secretGlobs],
     allowRead: [...workspace.repoReadAllow.map(trimTrailingSlashes), clone, scratch],
     readRoots: input.readRoots.map(trimTrailingSlashes),

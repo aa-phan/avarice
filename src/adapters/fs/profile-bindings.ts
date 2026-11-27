@@ -1,0 +1,442 @@
+// The repository binding registry and the enterprise remote patterns (SEC-1, D-16, S-9). `<configHome>/bindings.json` records which
+// profile a repository belongs to, keyed by the repository's realpath git root and its root commit; it lives outside every store, so
+// the profile can be chosen before any store is opened. Like the profile config, every file here is opened without following a symbolic
+// link and read only when it is a regular file of at most 64 KiB, so a planted link or a huge file cannot steer which store opens.
+// Entries are validated by hand: a file that does not validate is refused whole (nothing is skipped), because a skipped entry would
+// silently let a bound repository open under another profile.
+import { spawnSync } from 'node:child_process';
+import { closeSync, constants, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseProfileName, profileClass } from '../../domain/profile.ts';
+import { err, ok } from '../../domain/result.ts';
+import type { Result } from '../../domain/result.ts';
+import { configPathFor } from './profile-paths.ts';
+
+export const MAX_REGISTRY_BYTES = 64 * 1024;
+export const BINDINGS_FILE = 'bindings.json';
+const BINDINGS_SCHEMA = 1;
+const MAX_BINDINGS = 1000;
+const MAX_PATTERNS = 64;
+const MAX_PATTERN_CHARS = 256;
+
+export interface Binding {
+  gitRoot: string;
+  rootCommit: string;
+  profile: string;
+  boundAt: string;
+}
+
+export interface RepositoryIdentity {
+  gitRoot: string;
+  rootCommit: string;
+}
+
+export interface EnterprisePatterns {
+  profile: string;
+  patterns: string[];
+}
+
+// The parsed JSON of a small regular file, or `undefined` when the file is absent. A symbolic link, a file that is not regular, a file
+// over the cap and text that is not JSON are `invalid` with the file named; anything else that stops the read is `unavailable`.
+function readSmallJson(path: string, label: string): Result<unknown> {
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (e) {
+    const code = (e as { code?: unknown }).code;
+    if (code === 'ENOENT') return ok(undefined);
+    if (code === 'ELOOP') return err({ kind: 'invalid', field: label, reason: `${path} is a symbolic link, which is refused` });
+    return err({ kind: 'unavailable', cause: `cannot read ${path}: ${typeof code === 'string' ? code : 'open failed'}` });
+  }
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile()) return err({ kind: 'invalid', field: label, reason: `${path} is not a regular file` });
+    if (info.size > MAX_REGISTRY_BYTES) return err({ kind: 'invalid', field: label, reason: `${path} is larger than ${MAX_REGISTRY_BYTES} bytes` });
+    try {
+      return ok(JSON.parse(readFileSync(fd, 'utf8')) as unknown);
+    } catch {
+      return err({ kind: 'invalid', field: label, reason: `${path} is not valid JSON` });
+    }
+  } catch (e) {
+    return err({ kind: 'unavailable', cause: `cannot read ${path}: ${(e as { code?: unknown }).code === undefined ? 'read failed' : String((e as { code?: unknown }).code)}` });
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseBinding(value: unknown, path: string, index: number): Result<Binding> {
+  const where = `${path} entry ${index}`;
+  if (!isRecord(value)) return err({ kind: 'invalid', field: 'bindings', reason: `${where} is not an object` });
+  const { gitRoot, rootCommit, profile, boundAt } = value;
+  if (typeof gitRoot !== 'string' || gitRoot === '' || gitRoot.length > 4096) return err({ kind: 'invalid', field: 'bindings', reason: `${where} has no gitRoot` });
+  if (typeof rootCommit !== 'string' || !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(rootCommit)) return err({ kind: 'invalid', field: 'bindings', reason: `${where} has no rootCommit` });
+  if (typeof profile !== 'string') return err({ kind: 'invalid', field: 'bindings', reason: `${where} has no profile` });
+  const named = parseProfileName(profile);
+  if (!named.ok) return err({ kind: 'invalid', field: 'bindings', reason: `${where} names a profile that is not valid` });
+  if (typeof boundAt !== 'string' || boundAt === '' || boundAt.length > 64) return err({ kind: 'invalid', field: 'bindings', reason: `${where} has no boundAt` });
+  return ok({ gitRoot, rootCommit, profile, boundAt });
+}
+
+export function bindingsPathFor(configHome: string): string {
+  return join(configHome, BINDINGS_FILE);
+}
+
+// Every binding of the registry; an absent file is no bindings.
+export function readBindings(configHome: string): Result<Binding[]> {
+  const path = bindingsPathFor(configHome);
+  const raw = readSmallJson(path, BINDINGS_FILE);
+  if (!raw.ok) return raw;
+  if (raw.value === undefined) return ok([]);
+  if (!isRecord(raw.value) || raw.value['schema'] !== BINDINGS_SCHEMA || !Array.isArray(raw.value['bindings'])) {
+    return err({ kind: 'invalid', field: BINDINGS_FILE, reason: `${path} is not a version ${BINDINGS_SCHEMA} bindings file` });
+  }
+  const entries = raw.value['bindings'] as unknown[];
+  if (entries.length > MAX_BINDINGS) return err({ kind: 'invalid', field: BINDINGS_FILE, reason: `${path} holds more than ${MAX_BINDINGS} bindings` });
+  const out: Binding[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const parsed = parseBinding(entry, path, index);
+    if (!parsed.ok) return parsed;
+    out.push(parsed.value);
+  }
+  return ok(out);
+}
+
+// The identity of every project a store holds, bound to `profile` when it has no binding yet (D-18: a project already in a store belongs to the
+// profile of that store, so the first command that may write makes that explicit). A project whose repository path is no longer on disk has no
+// git root to bind and is skipped. A project that is already bound to the same profile is left alone; one bound to another profile is a
+// `conflict` naming the repository and that profile, and nothing is written for the projects after it.
+export function backfillBindings(configHome: string, profile: string, projects: ReadonlyArray<{ rootCommit: string; repoPath: string }>, nowMs: number): Result<number> {
+  return withBindingsLock(configHome, () => backfillLocked(configHome, profile, projects, nowMs));
+}
+
+// The backfill of every project under one hold of the lock, so no other writer's binding falls between two of its reads and writes.
+function backfillLocked(configHome: string, profile: string, projects: ReadonlyArray<{ rootCommit: string; repoPath: string }>, nowMs: number): Result<number> {
+  let added = 0;
+  for (const project of projects) {
+    let gitRoot: string;
+    try {
+      gitRoot = realpathSync(project.repoPath);
+    } catch {
+      continue;
+    }
+    const existing = findBinding(configHome, { gitRoot, rootCommit: project.rootCommit });
+    if (!existing.ok) return existing;
+    if (existing.value !== undefined) {
+      if (existing.value.profile === profile) continue;
+      return err({ kind: 'conflict', expected: profile, actual: `repository ${gitRoot} is bound to ${existing.value.profile}` });
+    }
+    const written = addBinding(configHome, { gitRoot, rootCommit: project.rootCommit, profile, boundAt: new Date(nowMs).toISOString() });
+    if (!written.ok) return written;
+    added += 1;
+  }
+  return ok(added);
+}
+
+// The binding of a repository: the entry whose git root and root commit are both the repository's.
+export function findBinding(configHome: string, identity: RepositoryIdentity): Result<Binding | undefined> {
+  const all = readBindings(configHome);
+  if (!all.ok) return all;
+  return ok(all.value.find((b) => b.gitRoot === identity.gitRoot && b.rootCommit === identity.rootCommit));
+}
+
+// How long a writer waits for the lock of another live process before the write fails as unavailable (WR-15).
+export const BINDINGS_LOCK_WAIT_MS = 2000;
+const LOCK_POLL_MS = 10;
+
+export function bindingsLockPathFor(configHome: string): string {
+  return `${bindingsPathFor(configHome)}.lock`;
+}
+
+// What a lock file names: the writer's process ID and the time it wrote the lock (`startedAt` is the time of the lock, not of the process).
+export interface LockHolder {
+  pid: number;
+  startedAt: string;
+}
+
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Whether a process with this ID exists; whether it is the process that wrote a lock is a separate question (lockIsStale). A lock that names this very process is a leftover of an earlier process that had the same ID, since this
+// process holds a lock only inside one synchronous call and never leaves one behind while it runs.
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as { code?: unknown }).code === 'EPERM';
+  }
+}
+
+type LockState = { kind: 'absent' } | { kind: 'stale'; text: string } | { kind: 'held'; holder: LockHolder | undefined };
+
+// A lock that names a live process is still stale when that process cannot be the writer. A process ID is reused after a crash, so the process now
+// holding the ID is compared with the lock: one that started more than this long after the lock was written is not the process that wrote it. The margin
+// covers the whole-second resolution of the elapsed time ps prints and the gap between a process starting and its lock being written.
+const START_MARGIN_MS = 2000;
+
+// How old a lock file must be before a live holder whose start time could not be read is taken to be gone. Far above one registry rewrite, which takes
+// milliseconds. The residual: a live but hung holder is taken over after this long when ps is not available.
+export const BINDINGS_STALE_AGE_MS = 60_000;
+
+export interface LockEvidence {
+  // The holder the lock names, or undefined when its text could not be read.
+  holder: LockHolder | undefined;
+  // Whether a process with the holder's ID exists.
+  alive: boolean;
+  // When the process now holding the holder's ID started, in epoch milliseconds, or undefined when that could not be read.
+  processStartMs: number | undefined;
+  // How long ago the lock file was last written.
+  lockAgeMs: number;
+}
+
+// Whether a lock is stale (GWR-05). A holder that cannot be read is a writer that has not finished writing it, unless it has been that way for longer than any
+// writer waits. A holder whose process is gone is stale. A holder whose ID a live process now holds is stale when that process started more than the margin
+// after the lock was written, since it cannot be the writer; when its start or the lock's time cannot be read, the lock is stale only when its file is older
+// than BINDINGS_STALE_AGE_MS.
+export function lockIsStale(evidence: LockEvidence): boolean {
+  const { holder, alive, processStartMs, lockAgeMs } = evidence;
+  if (holder === undefined) return lockAgeMs > BINDINGS_LOCK_WAIT_MS;
+  if (!alive) return true;
+  const wroteAt = Date.parse(holder.startedAt);
+  if (processStartMs !== undefined && Number.isFinite(wroteAt)) return processStartMs > wroteAt + START_MARGIN_MS;
+  return lockAgeMs > BINDINGS_STALE_AGE_MS;
+}
+
+// Seconds from the text `ps -o etime=` prints: `[[dd-]hh:]mm:ss`. Anything else is undefined.
+export function parseEtimeSeconds(text: string): number | undefined {
+  const m = /^(?:(\d+)-)?(?:(\d{2}):)?(\d{2}):(\d{2})$/.exec(text.trim());
+  if (m === null) return undefined;
+  const [days, hours, minutes, seconds] = [Number(m[1] ?? 0), Number(m[2] ?? 0), Number(m[3]), Number(m[4])];
+  if (minutes > 59 || seconds > 59 || hours > 23) return undefined;
+  return ((days * 24 + hours) * 60 + minutes) * 60 + seconds;
+}
+
+const PS_PATHS = ['/bin/ps', '/usr/bin/ps'];
+
+// When the process `pid` started, in epoch milliseconds: `nowMs` minus the elapsed time ps prints for it. The elapsed time involves no locale or time zone.
+// ps is run by absolute path with a fixed minimal environment, so nothing in the caller's environment steers it. Undefined on any failure: no ps, a
+// non-zero exit (no such process), a timeout, or output that does not parse.
+export function readProcessStartMs(pid: number, nowMs: number): number | undefined {
+  const ps = PS_PATHS.find((candidate) => {
+    try {
+      return statSync(candidate).isFile();
+    } catch {
+      return false;
+    }
+  });
+  if (ps === undefined) return undefined;
+  const ran = spawnSync(ps, ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'] });
+  if (ran.error !== undefined || ran.status !== 0) return undefined;
+  const elapsed = parseEtimeSeconds(ran.stdout);
+  return elapsed === undefined ? undefined : nowMs - elapsed * 1000;
+}
+
+// The lock file as found: gone, stale (see lockIsStale), or held.
+function inspectLock(lockPath: string): LockState {
+  let text: string;
+  try {
+    text = readFileSync(lockPath, 'utf8');
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'held', holder: undefined };
+  }
+  let holder: LockHolder | undefined;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (isRecord(parsed) && typeof parsed['pid'] === 'number' && Number.isSafeInteger(parsed['pid']) && parsed['pid'] > 0 && typeof parsed['startedAt'] === 'string') {
+      holder = { pid: parsed['pid'], startedAt: parsed['startedAt'] };
+    }
+  } catch {
+    holder = undefined;
+  }
+  let lockAgeMs: number;
+  try {
+    lockAgeMs = Date.now() - statSync(lockPath).mtimeMs;
+  } catch {
+    return { kind: 'absent' };
+  }
+  const alive = holder !== undefined && processAlive(holder.pid);
+  // The start time matters only for a holder whose ID a live process holds.
+  const processStartMs = holder !== undefined && alive ? readProcessStartMs(holder.pid, Date.now()) : undefined;
+  return lockIsStale({ holder, alive, processStartMs, lockAgeMs }) ? { kind: 'stale', text } : { kind: 'held', holder };
+}
+
+// Takes a stale lock out of the way: it is renamed to a name of this process (only one contender wins the rename) and removed once it is seen to
+// be the lock that was judged stale. A lock another writer created in the meantime is put back. A third writer creating a lock in the gap between
+// the rename and the put-back is a residual of taking over without a lock of its own: two writers then hold it until the first releases.
+function takeOver(lockPath: string, judged: string): Result<void> {
+  const aside = `${lockPath}.stale.${String(process.pid)}`;
+  try {
+    renameSync(lockPath, aside);
+  } catch (e) {
+    if ((e as { code?: unknown }).code === 'ENOENT') return ok(undefined);
+    return err({ kind: 'unavailable', cause: `cannot take over the stale lock ${lockPath}: ${String((e as { code?: unknown }).code ?? 'rename failed')}` });
+  }
+  try {
+    if (readFileSync(aside, 'utf8') !== judged) {
+      try {
+        linkSync(aside, lockPath);
+      } catch {
+        // someone created a lock in the gap; theirs stands
+      }
+    }
+  } catch {
+    // unreadable now: nothing to put back
+  } finally {
+    try {
+      unlinkSync(aside);
+    } catch {
+      // already gone
+    }
+  }
+  return ok(undefined);
+}
+
+function describeHolder(holder: LockHolder | undefined): string {
+  return holder === undefined ? 'a writer whose process could not be read' : `process ${String(holder.pid)}, which started it at ${holder.startedAt}`;
+}
+
+// Runs `fn` while holding the exclusive lock file beside the registry (WR-15): created with the exclusive-create flag, holding this process's ID and
+// time, waited for at most BINDINGS_LOCK_WAIT_MS, taken over when its holder no longer exists or its process ID now belongs to a process that started after
+// the lock was written (a reused ID, GWR-05), and removed when `fn` returns or throws.
+function withBindingsLock<T>(configHome: string, fn: () => Result<T>): Result<T> {
+  const lockPath = bindingsLockPathFor(configHome);
+  try {
+    mkdirSync(configHome, { recursive: true, mode: 0o700 });
+  } catch (e) {
+    return err({ kind: 'unavailable', cause: `cannot create ${configHome}: ${(e as { code?: unknown }).code === undefined ? 'mkdir failed' : String((e as { code?: unknown }).code)}` });
+  }
+  const mine = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
+  const deadline = Date.now() + BINDINGS_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const fd = openSync(lockPath, 'wx', 0o600);
+      try {
+        writeFileSync(fd, mine);
+      } catch (e) {
+        closeSync(fd);
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          // never created
+        }
+        return err({ kind: 'unavailable', cause: `cannot write ${lockPath}: ${(e as { code?: unknown }).code === undefined ? 'write failed' : String((e as { code?: unknown }).code)}` });
+      }
+      closeSync(fd);
+      break;
+    } catch (e) {
+      const code = (e as { code?: unknown }).code;
+      if (code !== 'EEXIST') return err({ kind: 'unavailable', cause: `cannot create ${lockPath}: ${typeof code === 'string' ? code : 'open failed'}` });
+    }
+    const state = inspectLock(lockPath);
+    if (state.kind === 'absent') continue;
+    if (state.kind === 'stale') {
+      const taken = takeOver(lockPath, state.text);
+      if (!taken.ok) return taken;
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      return err({ kind: 'unavailable', cause: `${lockPath} is held by ${describeHolder(state.holder)}; gave up waiting after ${String(BINDINGS_LOCK_WAIT_MS / 1000)} seconds` });
+    }
+    pause(LOCK_POLL_MS);
+  }
+  try {
+    return fn();
+  } finally {
+    // Only a lock that still names this process: one taken over from it is another writer's.
+    try {
+      if (readFileSync(lockPath, 'utf8') === mine) unlinkSync(lockPath);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+// Adds a binding. Create-only: a repository already bound to the same profile is left as it is, and one bound to another profile is a
+// `conflict` that changes nothing (a binding is never re-pointed). The registry is read, checked and rewritten under the lock, so a binding another
+// process added meanwhile is kept. The file is written to a temporary name through a descriptor (mode 0600), flushed to disk, and renamed over the
+// registry, so a reader sees the old registry or the new one and never half of either, and a crash leaves no empty registry.
+export function writeBinding(configHome: string, binding: Binding): Result<Binding> {
+  return withBindingsLock(configHome, () => addBinding(configHome, binding));
+}
+
+// The read-check-write of one binding; the caller holds the lock.
+function addBinding(configHome: string, binding: Binding): Result<Binding> {
+  const existing = readBindings(configHome);
+  if (!existing.ok) return existing;
+  const same = existing.value.find((b) => b.gitRoot === binding.gitRoot && b.rootCommit === binding.rootCommit);
+  if (same !== undefined) {
+    if (same.profile === binding.profile) return ok(same);
+    return err({ kind: 'conflict', expected: binding.profile, actual: `repository bound to ${same.profile}` });
+  }
+  if (existing.value.length >= MAX_BINDINGS) return err({ kind: 'invalid', field: BINDINGS_FILE, reason: `the registry already holds ${MAX_BINDINGS} bindings` });
+  const path = bindingsPathFor(configHome);
+  const temp = `${path}.${String(process.pid)}.tmp`;
+  try {
+    // Under the lock, a temporary file of this name is a leftover of an earlier process that had this ID.
+    try {
+      unlinkSync(temp);
+    } catch {
+      // none
+    }
+    const fd = openSync(temp, 'wx', 0o600);
+    try {
+      writeFileSync(fd, `${JSON.stringify({ schema: BINDINGS_SCHEMA, bindings: [...existing.value, binding] }, null, 2)}\n`);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temp, path);
+  } catch (e) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      // never written
+    }
+    return err({ kind: 'unavailable', cause: `cannot write ${path}: ${(e as { code?: unknown }).code === undefined ? 'write failed' : String((e as { code?: unknown }).code)}` });
+  }
+  return ok(binding);
+}
+
+function parsePatterns(value: unknown, path: string): Result<string[]> {
+  if (value === undefined) return ok([]);
+  if (!Array.isArray(value) || value.length > MAX_PATTERNS || !value.every((p) => typeof p === 'string' && p.trim() !== '' && p.length <= MAX_PATTERN_CHARS)) {
+    return err({ kind: 'invalid', field: 'remotePatterns', reason: `remotePatterns in ${path} must be a list of at most ${MAX_PATTERNS} non-empty strings of at most ${MAX_PATTERN_CHARS} characters` });
+  }
+  return ok(value as string[]);
+}
+
+// The `remotePatterns` of every enterprise profile config under `<configHome>/profiles/enterprise-*/config.json`, sorted by profile.
+// Only config files are read, never a store, and only the `remotePatterns` key. A directory whose name does not follow the profile
+// grammar is not a profile and is skipped; a config that cannot be trusted (a link, too large, not JSON, a malformed list) is an error,
+// so the caller refuses instead of taking the repository to be personal.
+export function readEnterprisePatterns(configHome: string): Result<EnterprisePatterns[]> {
+  let names: string[];
+  try {
+    names = readdirSync(join(configHome, 'profiles'));
+  } catch (e) {
+    const code = (e as { code?: unknown }).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return ok([]);
+    return err({ kind: 'unavailable', cause: `cannot list the profiles of ${configHome}: ${typeof code === 'string' ? code : 'read failed'}` });
+  }
+  const out: EnterprisePatterns[] = [];
+  for (const name of names.sort()) {
+    const named = parseProfileName(name);
+    if (!named.ok || profileClass(name) !== 'enterprise') continue;
+    const path = configPathFor(configHome, name);
+    const raw = readSmallJson(path, 'config');
+    if (!raw.ok) return err(raw.error.kind === 'invalid' ? { kind: 'invalid', field: 'config', reason: `profile ${name}: ${raw.error.reason}` } : raw.error);
+    if (raw.value === undefined) continue;
+    if (!isRecord(raw.value)) return err({ kind: 'invalid', field: 'config', reason: `profile ${name}: ${path} is not a JSON object` });
+    const patterns = parsePatterns(raw.value['remotePatterns'], path);
+    if (!patterns.ok) return err(patterns.error.kind === 'invalid' ? { kind: 'invalid', field: 'config', reason: `profile ${name}: ${patterns.error.reason}` } : patterns.error);
+    if (patterns.value.length > 0) out.push({ profile: name, patterns: patterns.value });
+  }
+  return ok(out);
+}

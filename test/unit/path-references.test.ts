@@ -6,7 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { danglingShare, extractPathReferences } from '../../src/domain/path-references.ts';
+import { danglingShare, explicitReferencesOf, extractPathReferences } from '../../src/domain/path-references.ts';
 import { AVARICE_TRACKED_WRITABLE, AVARICE_WRITE_SET, VALIDATION_LIMITS, validateMapArtifacts } from '../../src/domain/validation.ts';
 import type { MapArtifactFacts, MapFileFact } from '../../src/domain/validation.ts';
 import { FAST_MAP_FILES } from '../../src/domain/mapping.ts';
@@ -78,9 +78,11 @@ describe('extractPathReferences: names that are not path references', () => {
   });
 
   it('a genuinely missing path in a neutral sentence is still a reference, and then dangles', () => {
-    const found = refs(line('Handlers live in `src/missing.ts` and the helpers in `lib/nope/`.'));
+    const doc = line('Handlers live in `src/missing.ts` and the helpers in `lib/nope/`.');
+    const found = refs(doc);
     assert.deepEqual(found, ['src/missing.ts', 'lib/nope']);
-    const r = danglingShare(found, ['src/index.ts', 'src/util/strings.ts']);
+    // `lib/nope/` is written as a directory: an explicit form, so it names a repository path although `lib` is no top-level entry (plan 04-35).
+    const r = danglingShare(found, ['src/index.ts', 'src/util/strings.ts'], [], [], { explicit: explicitReferencesOf([doc]) });
     assert.deepEqual(r.dangling, ['src/missing.ts', 'lib/nope']);
     assert.equal(r.share, 1);
   });
@@ -98,8 +100,8 @@ describe('danglingShare: AVARICE own staging files and directory names', () => {
   });
 
   it('a path with a slash must match exactly: a directory basename is not enough', () => {
-    const r = danglingShare(['lib/codebase'], ['.planning/codebase/STACK.md']);
-    assert.deepEqual(r.dangling, ['lib/codebase']);
+    const r = danglingShare(['src/codebase'], ['src/lib/codebase/STACK.md']);
+    assert.deepEqual(r.dangling, ['src/codebase']);
   });
 });
 
@@ -314,7 +316,7 @@ describe('import-style and suffix resolution', () => {
   });
 
   it('a directory is not a suffix target: `anim/declarative` stays dangling while a file under it exists', () => {
-    assert.deepEqual(dangling(['anim/declarative']), ['anim/declarative']);
+    assert.deepEqual(danglingShare(['anim/declarative'], known, [], [], { explicit: ['anim/declarative'] }).dangling, ['anim/declarative']);
   });
 });
 
@@ -329,8 +331,11 @@ describe('package names and action references are not paths', () => {
     assert.deepEqual(result.byRule.module, ['motion/react', 'react/rules-of-hooks', '@scope/pkg/sub', 'react/only-export-components']);
   });
 
-  it('only a dependency counts: a longer name, another scope or a missing package stays dangling', () => {
-    assert.deepEqual(r(['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react']).dangling, ['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react']);
+  it('only a dependency resolves: a longer name, another scope or a missing package is no dependency and no repository path (not counted, plan 04-35)', () => {
+    const result = r(['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react', 'vendor/hooks.ts']);
+    assert.deepEqual(result.byRule.module, []);
+    assert.deepEqual(result.nonPaths, ['reactor/x', '@other/pkg/sub', 'lodash/fp', 'motions/react']);
+    assert.deepEqual(result.dangling, ['vendor/hooks.ts']);
   });
 
   it('an owner/name used by a workflow is an action, not a path', () => {
@@ -339,8 +344,10 @@ describe('package names and action references are not paths', () => {
     assert.deepEqual(result.byRule.action, ['actions/checkout', 'owner/name']);
   });
 
-  it('an action name the workflows do not use stays dangling', () => {
-    assert.deepEqual(r(['actions/setup-node', 'actions/checkout/extra']).dangling, ['actions/setup-node', 'actions/checkout/extra']);
+  it('an action name the workflows do not use is not an action and not a repository path (not counted, plan 04-35)', () => {
+    const result = r(['actions/setup-node', 'actions/checkout/extra']);
+    assert.deepEqual(result.byRule.action, []);
+    assert.deepEqual(result.nonPaths, ['actions/setup-node', 'actions/checkout/extra']);
   });
 
   it('build-emitted files and dotenv files are not forgiven by any of these rules', () => {
@@ -368,7 +375,8 @@ describe('package names and action references are not paths', () => {
         { mode: 'fast' },
       ).checks.find((c) => c.name === 'path-references');
     const named = [...KNOWN.slice(0, 12), 'react/rules-of-hooks', 'actions/checkout', 'lib/f01'];
-    assert.equal(judge(named, false)?.passed, false);
+    // Without the repository's own dependencies and workflows the two specifiers are not paths either: they are not counted (plan 04-35).
+    assert.match(judge(named, false)?.detail ?? '', /2 token\(s\) that do not name a repository path/);
     const ok = judge(named, true);
     assert.equal(ok?.passed, true, ok?.detail);
     assert.match(ok?.detail ?? '', /1 module specifier/);

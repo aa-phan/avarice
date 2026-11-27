@@ -1,9 +1,10 @@
 // The command-line history of the interactive shell (ADR-013 decision 2): `{dataRoot}/shell-history`, one entry per line, oldest first, created with
-// mode 0600 (a command line can name a brief or a run ID; T-02-63), capped at HISTORY_CAP lines with the oldest dropped. An entry is stored without
-// any control character, so a pasted escape sequence can neither forge a line nor rewrite the terminal when it is recalled. History is a
+// mode 0600 (a command line can name a brief or a run ID; T-02-63), capped at HISTORY_CAP lines with the oldest dropped. An entry is stored redacted (secret-shaped
+// strings and seeded credential values become `[REDACTED:<kind>]`, SEC-3) and without any control character, so a pasted escape sequence can neither forge a line nor rewrite the terminal when it is recalled. History is a
 // convenience: a missing, unreadable or unwritable file is an empty history or a skipped entry, never an error that stops the shell.
 import { chmodSync, closeSync, openSync, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
+import { processRedactor } from '../../adapters/redaction/process-redactor.ts';
 import { stripControl } from '../render/style.ts';
 
 export const HISTORY_FILE = 'shell-history';
@@ -35,7 +36,8 @@ export function loadHistory(dataRoot: string): string[] {
 // Adds one entry at the end. Returns false when the file could not be written; an entry that is empty after cleaning is skipped and counts as done.
 // At the cap the file is rewritten without its oldest lines through a temporary file in the same directory, so a crash leaves the old file or the new one.
 export function appendHistory(dataRoot: string, entry: string): boolean {
-  const clean = historyEntry(entry);
+  // SEC-3: a pasted token never reaches the file. Control characters go first, so an escape sequence cannot split a secret and hide it from the patterns.
+  const clean = processRedactor.redact(historyEntry(entry));
   if (clean === '') return true;
   const path = join(dataRoot, HISTORY_FILE);
   try {

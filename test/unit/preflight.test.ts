@@ -5,8 +5,8 @@ import { describe, it } from 'node:test';
 
 import { ONBOARDING_STATES } from '../../src/domain/onboarding-lifecycle.ts';
 import type { OnboardingState } from '../../src/domain/onboarding-lifecycle.ts';
-import { EXISTING_MAP_OUTCOME, classifyExistingMap, classifyPreflight } from '../../src/domain/preflight.ts';
-import type { LedgerView, MapFileFacts, RepoFacts } from '../../src/domain/preflight.ts';
+import { classifyExistingMap, classifyPreflight, existingMapOutcome, userOwnedPaths } from '../../src/domain/preflight.ts';
+import type { ExistingMapClass, LedgerView, MapFileFacts, RepoFacts } from '../../src/domain/preflight.ts';
 
 const SEVEN = ['STACK', 'ARCHITECTURE', 'STRUCTURE', 'CONVENTIONS', 'TESTING', 'INTEGRATIONS', 'CONCERNS'];
 const FOUR = ['STACK', 'INTEGRATIONS', 'ARCHITECTURE', 'STRUCTURE'];
@@ -41,7 +41,8 @@ function facts(over: Partial<RepoFacts> = {}): RepoFacts {
   };
 }
 
-const NO_STATE: LedgerView = { activeRecord: false, onboardings: [] };
+const NO_STATE: LedgerView = { activeRecord: null, onboardings: [] };
+const ACTIVE = { recordVersion: 3, onboardedRevision: 'a'.repeat(40) };
 
 describe('classifyExistingMap', () => {
   const cases: Array<[string, Partial<RepoFacts>, string]> = [
@@ -100,22 +101,22 @@ describe('classifyPreflight findings', () => {
     assert.deepEqual(findings['runtimes'], ['.nvmrc:22']);
     assert.equal(findings['trackedFiles'], 42);
     assert.equal(findings['trackedBytes'], 4242);
-    assert.deepEqual(findings['existingState'], { planningExists: true, codebaseMap: 'none', adoptionDeferred: false, outcome: EXISTING_MAP_OUTCOME });
+    assert.deepEqual(findings['existingState'], { planningExists: true, codebaseMap: 'none', outcome: 'map', drift: null, userOwned: [] });
   });
 
   it('a repository like the target (committed PROJECT, ROADMAP and STATE, no map) proceeds with planningExists true and codebaseMap none', () => {
     const result = classifyPreflight(facts({ planningFiles: ['.planning/PROJECT.md', '.planning/ROADMAP.md', '.planning/STATE.md'] }), NO_STATE, {});
     assert.ok(result.ok);
-    assert.deepEqual(result.value.findings['existingState'], { planningExists: true, codebaseMap: 'none', adoptionDeferred: false, outcome: 'isolated-regeneration' });
+    assert.deepEqual(result.value.findings['existingState'], { planningExists: true, codebaseMap: 'none', outcome: 'map', drift: null, userOwned: [] });
   });
 
-  it('every existing map regenerates in isolation, and only a complete stamped map defers adoption', () => {
+  it('records the class and the outcome without a drift verdict: a complete stamped map waits for GSD in staging, a partial one is mapped in full', () => {
     const complete = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => mapFile(n)), planningFiles: ['.planning/codebase/STACK.md'] }), NO_STATE, {});
     assert.ok(complete.ok);
-    assert.deepEqual(complete.value.findings['existingState'], { planningExists: true, codebaseMap: 'stamped-complete', adoptionDeferred: true, outcome: 'isolated-regeneration' });
+    assert.deepEqual(complete.value.findings['existingState'], { planningExists: true, codebaseMap: 'stamped-complete', outcome: 'full-in-staging', drift: null, userOwned: [] });
     const partial = classifyPreflight(facts({ codebaseMapFiles: FOUR.map((n) => mapFile(n)) }), NO_STATE, {});
     assert.ok(partial.ok);
-    assert.deepEqual(partial.value.findings['existingState'], { planningExists: false, codebaseMap: 'stamped-partial', adoptionDeferred: false, outcome: 'isolated-regeneration' });
+    assert.deepEqual(partial.value.findings['existingState'], { planningExists: false, codebaseMap: 'stamped-partial', outcome: 'full-in-staging', drift: null, userOwned: [] });
   });
 });
 
@@ -126,16 +127,37 @@ describe('classifyPreflight refusals (ONB-6)', () => {
     return { kind: error.kind, text: JSON.stringify(error) };
   }
 
-  it('refuses with existing_state_conflict when an active record exists for the project', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: true, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {}));
+  it('refuses a caller that does not mean to refresh when an active record exists for the project (`repo add`)', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, {}));
     assert.equal(r.kind, 'conflict');
     assert.match(r.text, /existing_state_conflict/);
+    assert.match(r.text, /avarice onboard/);
+  });
+
+  it('plans a refresh, not a refusal, when an active record exists for the project and the caller refreshes (ONB-11)', () => {
+    const result = classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_x', state: 'active' }] }, { refresh: true });
+    assert.ok(result.ok, 'an active project is refreshed');
+    assert.deepEqual(result.value.findings['refreshOf'], { recordVersion: 3, onboardedRevision: 'a'.repeat(40) });
+    assert.equal(result.value.continueOnboardingId, null, 'the stopped onboarding of the earlier record is not continued');
+  });
+
+  it('states no refresh for a project without an active record', () => {
+    const result = classifyPreflight(facts(), NO_STATE, {});
+    assert.ok(result.ok);
+    assert.equal('refreshOf' in result.value.findings, false);
+  });
+
+  it('still refuses a refresh while another onboarding of the project is running', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [{ onboardingId: 'onb_run', state: 'mapping' }] }, { refresh: true }));
+    assert.equal(r.kind, 'conflict');
+    assert.match(r.text, /existing_state_conflict/);
+    assert.match(r.text, /onb_run/);
   });
 
   const NON_STOP: OnboardingState[] = ['contract_proposed', 'mapping', 'paused', 'validating', 'validation_failed', 'planning', 'planning_ready', 'stale'];
   for (const state of NON_STOP) {
     it(`refuses with existing_state_conflict while another onboarding is ${state}`, () => {
-      const r = refusal(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_other', state }] }, {}));
+      const r = refusal(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_other', state }] }, {}));
       assert.equal(r.kind, 'conflict');
       assert.match(r.text, /existing_state_conflict/);
       assert.match(r.text, /onb_other/);
@@ -144,43 +166,110 @@ describe('classifyPreflight refusals (ONB-6)', () => {
 
   for (const state of ['blocked', 'incompatible', 'deactivated'] as const) {
     it(`does not refuse because of an onboarding that stopped as ${state}`, () => {
-      assert.ok(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_old', state }] }, {}).ok);
+      assert.ok(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_old', state }] }, {}).ok);
     });
   }
 
   it('continues an onboarding that is still in discovered instead of creating a second one', () => {
-    const r = classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_first', state: 'discovered' }] }, {});
+    const r = classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_first', state: 'discovered' }] }, {});
     assert.ok(r.ok);
     assert.equal(r.value.continueOnboardingId, 'onb_first');
   });
 
   it('refuses when a discovered onboarding exists next to one that is already running', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_a', state: 'discovered' }, { onboardingId: 'onb_b', state: 'mapping' }] }, {}));
+    const r = refusal(classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_a', state: 'discovered' }, { onboardingId: 'onb_b', state: 'mapping' }] }, {}));
     assert.equal(r.kind, 'conflict');
   });
 
   it('knows every lifecycle state: each is either refused, continued, or ignored', () => {
     for (const state of ONBOARDING_STATES) {
-      const result = classifyPreflight(facts(), { activeRecord: false, onboardings: [{ onboardingId: 'onb_s', state }] }, {});
+      const result = classifyPreflight(facts(), { activeRecord: null, onboardings: [{ onboardingId: 'onb_s', state }] }, {});
       assert.ok(typeof result.ok === 'boolean', state);
     }
   });
 
-  for (const promote of ['copy', 'commit', '', 'NONE']) {
-    it(`refuses promotion ${JSON.stringify(promote)}`, () => {
+  for (const promote of ['push', 'branch', '', 'NONE']) {
+    it(`refuses promotion ${JSON.stringify(promote)}, naming none, copy and commit`, () => {
       const r = refusal(classifyPreflight(facts(), NO_STATE, { promote }));
       assert.equal(r.kind, 'invalid');
       assert.match(r.text, /request\.promote/);
+      for (const allowed of ['none', 'copy', 'commit']) assert.ok(r.text.includes(allowed), r.text);
     });
   }
 
-  it('accepts promotion none, and no promotion', () => {
-    assert.ok(classifyPreflight(facts(), NO_STATE, { promote: 'none' }).ok);
+  it('accepts promotion none, copy and commit, and no promotion', () => {
+    for (const promote of ['none', 'copy', 'commit']) assert.ok(classifyPreflight(facts(), NO_STATE, { promote }).ok, promote);
     assert.ok(classifyPreflight(facts(), NO_STATE, {}).ok);
   });
 
-  it('reports a promotion request before a state conflict', () => {
-    const r = refusal(classifyPreflight(facts(), { activeRecord: true, onboardings: [] }, { promote: 'copy' }));
+  it('reports a refused promotion value before a state conflict', () => {
+    const r = refusal(classifyPreflight(facts(), { activeRecord: ACTIVE, onboardings: [] }, { promote: 'push' }));
     assert.equal(r.kind, 'invalid');
+  });
+});
+
+describe('existingMapOutcome (ONB-6, D-10)', () => {
+  type Drift = 'pass' | 'block' | 'unreadable' | null;
+  const DRIFTS: Drift[] = ['pass', 'block', 'unreadable', null];
+  // The oracle is the table of docs/repository-onboarding.md "Repositories already using GSD", written out per class and drift value.
+  const expected: Record<ExistingMapClass, Record<string, string>> = {
+    none: { pass: 'map', block: 'map', unreadable: 'map', null: 'map' },
+    'stamped-complete': { pass: 'adopt', block: 'refresh', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    'stamped-partial': { pass: 'full-in-staging', block: 'full-in-staging', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    unstamped: { pass: 'full-in-staging', block: 'full-in-staging', unreadable: 'full-in-staging', null: 'full-in-staging' },
+    'unknown-format': { pass: 'isolated-regeneration', block: 'isolated-regeneration', unreadable: 'isolated-regeneration', null: 'isolated-regeneration' },
+    'user-edited': { pass: 'isolated-regeneration', block: 'isolated-regeneration', unreadable: 'isolated-regeneration', null: 'isolated-regeneration' },
+  };
+  for (const [cls, byDrift] of Object.entries(expected) as Array<[ExistingMapClass, Record<string, string>]>) {
+    for (const drift of DRIFTS) {
+      it(`${cls} with drift ${String(drift)} is ${byDrift[String(drift)]}`, () => {
+        assert.equal(existingMapOutcome(cls, drift), byDrift[String(drift)]);
+      });
+    }
+  }
+
+  it('adopts nothing without a drift pass: the stamp alone never makes a map adoptable (T-04-26)', () => {
+    for (const cls of Object.keys(expected) as ExistingMapClass[]) {
+      for (const drift of DRIFTS.filter((d) => d !== 'pass')) assert.notEqual(existingMapOutcome(cls, drift), 'adopt', `${cls} ${String(drift)}`);
+    }
+    for (const cls of Object.keys(expected).filter((c) => c !== 'stamped-complete') as ExistingMapClass[]) assert.notEqual(existingMapOutcome(cls, 'pass'), 'adopt', cls);
+  });
+
+  it('refuses a class it does not know', () => {
+    assert.throws(() => existingMapOutcome('sideways' as ExistingMapClass, 'pass'), TypeError);
+  });
+});
+
+describe('userOwnedPaths (ONB-6)', () => {
+  const edited = (n: string): MapFileFacts => mapFile(n, { lastCommit: C2 });
+
+  it('lists the map files edited after their stamp commit, and every changed file under .planning/, for an edited map', () => {
+    const map = facts({
+      codebaseMapFiles: SEVEN.map((n) => (n === 'TESTING' || n === 'STACK' ? edited(n) : mapFile(n))),
+      modified: ['.planning/codebase/CONCERNS.md', 'src/a.ts'],
+      untracked: ['.planning/notes.md', 'scratch.txt'],
+    });
+    assert.equal(classifyExistingMap(map), 'user-edited');
+    assert.deepEqual(userOwnedPaths(map, 'user-edited'), ['.planning/codebase/CONCERNS.md', '.planning/codebase/STACK.md', '.planning/codebase/TESTING.md', '.planning/notes.md']);
+  });
+
+  it('lists every file of a map of another format, and nothing for the classes that are the owner\'s generated output', () => {
+    const other = facts({ codebaseMapFiles: [mapFile('STACK'), mapFile('NOTES')] });
+    assert.deepEqual(userOwnedPaths(other, 'unknown-format'), ['.planning/codebase/NOTES.md', '.planning/codebase/STACK.md']);
+    for (const cls of ['none', 'stamped-complete', 'stamped-partial', 'unstamped'] as const) {
+      assert.deepEqual(userOwnedPaths(facts({ codebaseMapFiles: SEVEN.map((n) => edited(n)), modified: ['.planning/x.md'] }), cls), [], cls);
+    }
+  });
+
+  it('is part of the findings for an edited map and for a map of another format, and empty otherwise', () => {
+    const editedMap = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => (n === 'STACK' ? edited(n) : mapFile(n))) }), NO_STATE, {});
+    assert.ok(editedMap.ok);
+    assert.deepEqual(editedMap.value.findings['existingState'], { planningExists: false, codebaseMap: 'user-edited', outcome: 'isolated-regeneration', drift: null, userOwned: ['.planning/codebase/STACK.md'] });
+    const unknown = classifyPreflight(facts({ codebaseMapFiles: [mapFile('STACK'), mapFile('NOTES')] }), NO_STATE, {});
+    assert.ok(unknown.ok);
+    assert.deepEqual((unknown.value.findings['existingState'] as { userOwned: string[] }).userOwned, ['.planning/codebase/NOTES.md', '.planning/codebase/STACK.md']);
+    const clean = classifyPreflight(facts({ codebaseMapFiles: SEVEN.map((n) => mapFile(n)) }), NO_STATE, {});
+    assert.ok(clean.ok);
+    assert.deepEqual((clean.value.findings['existingState'] as { userOwned: string[] }).userOwned, []);
   });
 });

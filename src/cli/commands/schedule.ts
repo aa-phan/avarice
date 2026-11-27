@@ -30,7 +30,7 @@ export function usage(args: ParsedArgs, env: NodeJS.ProcessEnv = process.env, co
   const refused = context === undefined ? 'needs an interactive terminal' : refuseOutsideTerminal(env, context);
   if (refused !== undefined) return refused;
   const verb = args.positionals[0];
-  if ((verb !== 'install' && verb !== 'remove') || args.positionals.length > 1 || Object.keys(args.flags).length > 0) return USAGE;
+  if ((verb !== 'install' && verb !== 'remove') || args.positionals.length > 1 || Object.keys(args.flags).some((flag) => flag !== 'profile')) return USAGE;
   return undefined;
 }
 
@@ -100,7 +100,7 @@ export function run(args: ParsedArgs, deps: AppDeps, io: Io, extras: CommandExtr
     nodeArgs: options.nodeArgs ?? (extras.scheduler !== undefined ? [] : process.execArgv.filter((flag) => NODE_FLAG.test(flag))),
     entryPath,
     times,
-    env: { AVARICE_CONFIG_HOME: deps.profile.configHome, AVARICE_DATA_ROOT: deps.profile.dataRoot, AVARICE_WORK_ROOT: deps.profile.workRoot },
+    env: { AVARICE_CONFIG_HOME: deps.profile.configHome, AVARICE_DATA_ROOT: deps.profile.dataRoot, AVARICE_WORK_ROOT: deps.profile.workRoot, AVARICE_PROFILE: deps.profile.profile },
     logPath: join(deps.profile.dataRoot, 'logs', 'digest.log'),
   });
   if (!installed.ok) return fail(io, installed.error);

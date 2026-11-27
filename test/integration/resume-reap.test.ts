@@ -39,7 +39,7 @@ interface Fixture {
 
 // A scratch onboarding killed at the checkpoint of `index:intel` (so before any intel or knowledge launch), reopened
 // in-process with a host that wraps the fake host and answers `reap` with `reap`.
-function fixture(reap: (request: ReapRequest, deps: AppDeps, onboardingId: string) => ReapResult): Fixture {
+function fixture(reap: (request: ReapRequest, deps: AppDeps, onboardingId: string) => ReapResult, options: { noReap?: boolean } = {}): Fixture {
   const roots = freshProfile();
   const repo = makeScratchRepo({ files: REPO_FILES });
   cleanup.push(roots.base, repo.base);
@@ -54,10 +54,14 @@ function fixture(reap: (request: ReapRequest, deps: AppDeps, onboardingId: strin
   const host: AgentHost = {
     descriptor: inner.descriptor,
     invoke: (request, signal) => inner.invoke(request, signal),
-    reap: async (request) => {
-      reapCalls.push(request);
-      return reap(request, current as AppDeps, onboardingId);
-    },
+    ...(options.noReap === true
+      ? {}
+      : {
+          reap: async (request: ReapRequest) => {
+            reapCalls.push(request);
+            return reap(request, current as AppDeps, onboardingId);
+          },
+        }),
   };
   const env = {
     ...process.env,
@@ -72,13 +76,13 @@ function fixture(reap: (request: ReapRequest, deps: AppDeps, onboardingId: strin
 }
 
 // The `started` row `prepareInvocation` records before the host is launched.
-function insertStarted(deps: AppDeps, onboardingId: string, purpose: 'intel' | 'knowledge'): string {
+function insertStarted(deps: AppDeps, onboardingId: string, purpose: 'intel' | 'knowledge', recordSession = true): string {
   const sessionId = randomUUID();
   const recorded = deps.ledger.recordStepResult(onboardingId, {
     step: `launch:${purpose}`,
     attempt: 1,
     status: 'started',
-    result: { invocationId: `inv_${purpose}`, sessionId, purpose },
+    result: { invocationId: `inv_${purpose}`, ...(recordSession ? { sessionId } : {}), purpose },
     nowMs: Date.now(),
   });
   assert.ok(recorded.ok, 'the started row is recorded');
@@ -172,6 +176,55 @@ describe('resume reaps every started launch before anything else (plan 01-21)', 
       assert.ok(resumed.ok, 'the resume does not fail');
       assert.equal(resumed.value.state, 'active');
       assert.equal(f.reapCalls.length, 0, 'nothing was reaped');
+    } finally {
+      f.close();
+    }
+  });
+});
+
+// A started launch that cannot be reaped is a host nobody can vouch for: the resume stops with an internal error that names the onboarding and marks no launch
+// interrupted, so a relaunch never runs beside a host that may still be writing (WR-07, CON-4).
+describe('resume stops when a started launch cannot be reaped (WR-07, CON-4)', () => {
+  const assertStopped = async (f: Fixture, deps: AppDeps = f.deps): Promise<void> => {
+    const resumed = await resumeOnboarding(deps, f.onboardingId);
+    assert.equal(resumed.ok, false, 'the resume stops with an error');
+    assert.equal(!resumed.ok && resumed.error.kind, 'internal');
+    assert.ok(!resumed.ok && resumed.error.kind === 'internal' && resumed.error.cause.includes(f.onboardingId), `the error names the onboarding: ${JSON.stringify(!resumed.ok && resumed.error)}`);
+    assert.deepEqual(statusesOf(launchRows(f.deps, f.onboardingId)), [{ step: 'launch:intel', attempt: 1, status: 'started' }], 'no launch is marked interrupted');
+  };
+
+  it('a restricted onboarding with no restricted host composed', async () => {
+    const f = fixture(() => ok({ terminated: 0 }));
+    try {
+      const recorded = f.deps.ledger.recordStepResult(f.onboardingId, { step: 'mapping:plan', attempt: 2, status: 'completed', result: { mode: 'full', restricted: true }, nowMs: Date.now(), completedAtMs: Date.now() });
+      assert.ok(recorded.ok, 'the restricted plan is recorded');
+      insertStarted(f.deps, f.onboardingId, 'intel');
+      // The deployment composes no restricted host; the contained host is never a stand-in for it (T-04-66).
+      const withoutRestricted: AppDeps = { ...f.deps };
+      delete withoutRestricted.restrictedHost;
+      await assertStopped(f, withoutRestricted);
+      assert.equal(f.reapCalls.length, 0, 'the contained host is not asked to reap a restricted launch');
+    } finally {
+      f.close();
+    }
+  });
+
+  it('a host that has no reap', async () => {
+    const f = fixture(() => ok({ terminated: 0 }), { noReap: true });
+    try {
+      insertStarted(f.deps, f.onboardingId, 'intel');
+      await assertStopped(f);
+    } finally {
+      f.close();
+    }
+  });
+
+  it('a started launch that recorded no session ID', async () => {
+    const f = fixture(() => ok({ terminated: 0 }));
+    try {
+      insertStarted(f.deps, f.onboardingId, 'intel', false);
+      await assertStopped(f);
+      assert.equal(f.reapCalls.length, 0);
     } finally {
       f.close();
     }
